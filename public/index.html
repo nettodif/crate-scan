@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CrateScan — Análise de qualidade de áudio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="rack">
+
+    <header class="rack__header">
+      <div class="brand">
+        <span class="brand__mark">CS</span>
+        <div class="brand__text">
+          <h1>CrateScan</h1>
+          <p>Pré-análise de qualidade de áudio antes de subir na crate</p>
+        </div>
+      </div>
+      <div class="led" id="statusLed" data-state="idle">
+        <span class="led__dot"></span>
+        <span class="led__label" id="statusLabel">Aguardando</span>
+      </div>
+    </header>
+
+    <section class="panel panel--input">
+      <label for="urlInput" class="panel__label">URL do YouTube / YouTube Music</label>
+      <div class="input-row">
+        <input
+          type="text"
+          id="urlInput"
+          placeholder="https://music.youtube.com/watch?v=..."
+          autocomplete="off"
+        />
+        <button id="analyzeBtn" class="btn btn--primary">
+          <span id="analyzeBtnLabel">Analisar</span>
+        </button>
+      </div>
+      <p class="panel__hint" id="errorHint"></p>
+    </section>
+
+    <section class="panel panel--results" id="resultsPanel" hidden>
+
+      <div class="track-info">
+        <h2 id="trackTitle">—</h2>
+        <p id="trackUploader">—</p>
+      </div>
+
+      <div class="meters">
+        <div class="meter">
+          <span class="meter__label">Codec</span>
+          <span class="meter__value" id="metricCodec">—</span>
+        </div>
+        <div class="meter">
+          <span class="meter__label">Bitrate declarado</span>
+          <span class="meter__value" id="metricBitrate">—</span>
+        </div>
+        <div class="meter">
+          <span class="meter__label">Sample rate</span>
+          <span class="meter__value" id="metricSampleRate">—</span>
+        </div>
+        <div class="meter">
+          <span class="meter__label">Canais</span>
+          <span class="meter__value" id="metricChannels">—</span>
+        </div>
+        <div class="meter">
+          <span class="meter__label">Corte espectral estimado</span>
+          <span class="meter__value" id="metricCutoff">—</span>
+        </div>
+        <div class="meter">
+          <span class="meter__label">Duração</span>
+          <span class="meter__value" id="metricDuration">—</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdictBox" data-level="unknown">
+        <span class="verdict__badge" id="verdictBadge">—</span>
+        <p class="verdict__text" id="verdictText">—</p>
+      </div>
+
+      <div class="notes" id="notesBox" hidden></div>
+
+      <div class="scope">
+        <div class="scope__bezel">
+          <div class="scope__screw scope__screw--tl"></div>
+          <div class="scope__screw scope__screw--tr"></div>
+          <div class="scope__screw scope__screw--bl"></div>
+          <div class="scope__screw scope__screw--br"></div>
+          <div class="scope__label">ESPECTROGRAMA — 0Hz A NYQUIST</div>
+          <img id="spectrogramImg" class="scope__img" alt="Espectrograma da faixa" />
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

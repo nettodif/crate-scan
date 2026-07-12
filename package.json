@@ -1,0 +1,14 @@
+{
+  "name": "cratescan",
+  "version": "1.0.0",
+  "description": "Pre-analise de qualidade de audio para faixas do YouTube / YouTube Music",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "fft.js": "^4.0.4"
+  }
+}
