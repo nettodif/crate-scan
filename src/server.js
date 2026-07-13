@@ -5,6 +5,7 @@ import { config } from './config.js';
 import * as ytDlp from './services/ytDlpService.js';
 import * as ffmpeg from './services/ffmpegService.js';
 import * as spectrumAnalyzer from './services/spectrumAnalyzer.js';
+import * as analysisCache from './services/analysisCache.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
@@ -20,10 +21,25 @@ app.post('/api/analyze', async (req, res) => {
     return;
   }
 
+  let info;
+  try {
+    info = await ytDlp.fetchInfoAsync(url);
+  } catch (err) {
+    console.error('Falha ao obter informações do vídeo', err);
+    res.status(502).json({ title: 'Falha ao obter informações do vídeo', detail: err.message });
+    return;
+  }
+
+  const cached = analysisCache.get(info.id);
+  if (cached) {
+    res.status(200).json({ ...cached, cached: true });
+    return;
+  }
+
   let download;
   try {
     console.log(`Baixando áudio de ${url}`);
-    download = await ytDlp.downloadAsync(url);
+    download = await ytDlp.downloadAsync(url, info);
   } catch (err) {
     console.error('Falha no download', err);
     res.status(502).json({ title: 'Falha ao baixar o áudio', detail: err.message });
@@ -59,7 +75,7 @@ app.post('/api/analyze', async (req, res) => {
       notes.push(`Sample rate de ${metadata.sampleRateHz}Hz está abaixo do padrão de CD/streaming (44.1kHz).`);
     }
 
-    res.status(200).json({
+    const responseBody = {
       title: download.title,
       uploader: download.uploader,
       sourceUrl: url,
@@ -69,7 +85,10 @@ app.post('/api/analyze', async (req, res) => {
       overallVerdict: spectrum.verdict,
       overallVerdictLevel: spectrum.verdictLevel,
       notes,
-    });
+    };
+
+    analysisCache.set(info.id, responseBody);
+    res.status(200).json(responseBody);
   } catch (err) {
     console.error('Falha na análise', err);
     res.status(500).json({ title: 'Falha ao analisar o áudio', detail: err.message });

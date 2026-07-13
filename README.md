@@ -85,16 +85,18 @@ create-scan/
 - O "corte espectral" é uma heurística (limiar de -24dB abaixo da banda de referência
   1-5kHz). Funciona bem para casos claros (128kbps vs lossless), mas pode ser impreciso em
   fronteiras (ex.: 192kbps vs 224kbps).
-- Cada análise baixa o áudio do zero (sem cache); faixas longas demoram mais.
+- ~~Cada análise baixa o áudio do zero (sem cache); faixas longas demoram mais.~~ Resolvido:
+  há cache em memória por `videoId` (TTL 1h, ver `src/services/analysisCache.js`) — uma
+  segunda análise da mesma faixa retorna instantânea com `cached: true`.
 - Sem fila/streaming de progresso — a requisição fica bloqueada até terminar. Para faixas
   muito longas isso pode exigir aumentar o timeout do lado do cliente/proxy.
-- Sem persistência: nada é salvo em banco; cada análise é isolada.
+- Sem persistência: nada é salvo em banco; cada análise é isolada (o cache em memória
+  zera a cada restart do processo).
 - Roda em um único processo/porta local; ainda não há Dockerfile (fica para quando formos
   falar de deploy no Railway/Cloudflare).
 
 ## Ideias para as próximas iterações
 
-- Cache de análises por `videoId` (evitar rebaixar a mesma faixa).
 - Fila com progresso em tempo real (Server-Sent Events ou WebSockets) para faixas longas.
 - Suporte a playlists (analisar várias faixas em lote).
 - Exportar relatório (PDF/CSV) de uma sessão de análise.

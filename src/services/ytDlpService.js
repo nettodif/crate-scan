@@ -12,7 +12,7 @@ const tempRoot = path.join(os.tmpdir(), 'cratescan');
  * Downloads the best available audio stream (no re-encoding) for the given URL
  * and returns the local file path plus basic metadata.
  */
-export async function downloadAsync(url) {
+export async function downloadAsync(url, info) {
   await fs.mkdir(tempRoot, { recursive: true });
 
   const jobId = randomUUID().replace(/-/g, '');
@@ -48,12 +48,12 @@ export async function downloadAsync(url) {
     throw new Error(`yt-dlp concluiu, mas o arquivo de áudio não foi encontrado. Saída: ${result.stdOut}`);
   }
 
-  const { title, uploader, duration, id } = await fetchInfoAsync(url);
+  const { title, uploader, duration, id } = info ?? await fetchInfoAsync(url);
 
   return { filePath, id, title, uploader, durationSec: duration };
 }
 
-async function fetchInfoAsync(url) {
+export async function fetchInfoAsync(url) {
   const args = ['--no-playlist', '--no-warnings', '--dump-json', url];
   const result = await runAsync(config.ytDlpPath, args);
 
