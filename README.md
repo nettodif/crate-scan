@@ -88,8 +88,11 @@ create-scan/
 - ~~Cada análise baixa o áudio do zero (sem cache); faixas longas demoram mais.~~ Resolvido:
   há cache em memória por `videoId` (TTL 1h, ver `src/services/analysisCache.js`) — uma
   segunda análise da mesma faixa retorna instantânea com `cached: true`.
-- Sem fila/streaming de progresso — a requisição fica bloqueada até terminar. Para faixas
-  muito longas isso pode exigir aumentar o timeout do lado do cliente/proxy.
+- ~~Sem fila/streaming de progresso — a requisição fica bloqueada até terminar.~~ Resolvido:
+  `GET /api/analyze/stream?url=...` expõe a mesma análise via Server-Sent Events, emitindo
+  estágios (`download_start`, `download_progress`, `metadata_start`, `spectrogram_start`,
+  `fft_start`, `done`/`error`) — o frontend consome via `EventSource`. `POST /api/analyze`
+  continua disponível (bloqueante) para clientes simples.
 - Sem persistência: nada é salvo em banco; cada análise é isolada (o cache em memória
   zera a cada restart do processo).
 - Roda em um único processo/porta local; ainda não há Dockerfile (fica para quando formos
@@ -97,7 +100,6 @@ create-scan/
 
 ## Ideias para as próximas iterações
 
-- Fila com progresso em tempo real (Server-Sent Events ou WebSockets) para faixas longas.
 - Suporte a playlists (analisar várias faixas em lote).
 - Exportar relatório (PDF/CSV) de uma sessão de análise.
 - Dockerfile + docker-compose (com ffmpeg/yt-dlp já embutidos na imagem) para preparar o

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 /**
  * Runs a process to completion and returns its stdout/stderr as text.
  */
-export function runAsync(fileName, args, { signal } = {}) {
+export function runAsync(fileName, args, { signal, onStdout } = {}) {
   return new Promise((resolve, reject) => {
     let child;
     try {
@@ -16,7 +16,10 @@ export function runAsync(fileName, args, { signal } = {}) {
     let stdOut = '';
     let stdErr = '';
 
-    child.stdout.on('data', (chunk) => { stdOut += chunk; });
+    child.stdout.on('data', (chunk) => {
+      stdOut += chunk;
+      onStdout?.(chunk.toString());
+    });
     child.stderr.on('data', (chunk) => { stdErr += chunk; });
 
     child.on('error', (err) => reject(wrapSpawnError(fileName, err)));

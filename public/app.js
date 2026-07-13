@@ -51,7 +51,21 @@ function formatHz(hz) {
   return `${(hz / 1000).toFixed(1)} kHz`;
 }
 
-async function analyze() {
+const STAGE_LABELS = {
+  info_start: 'Buscando informações da faixa',
+  download_start: 'Baixando áudio',
+  metadata_start: 'Lendo metadados',
+  spectrogram_start: 'Gerando espectrograma',
+  fft_start: 'Analisando espectro',
+  cached: 'Encontrado em cache',
+};
+
+function finishAnalyze() {
+  analyzeBtn.disabled = false;
+  analyzeBtnLabel.textContent = 'Analisar';
+}
+
+function analyze() {
   const url = urlInput.value.trim();
   errorHint.textContent = '';
 
@@ -62,32 +76,45 @@ async function analyze() {
 
   analyzeBtn.disabled = true;
   analyzeBtnLabel.textContent = 'Analisando…';
-  setStatus('loading', 'Baixando e analisando');
+  setStatus('loading', 'Iniciando…');
   resultsPanel.hidden = true;
 
-  try {
-    const response = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
+  const source = new EventSource(`/api/analyze/stream?url=${encodeURIComponent(url)}`);
 
-    if (!response.ok) {
-      const problem = await response.json().catch(() => null);
-      throw new Error(problem?.detail || problem?.error || `Erro HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    renderResult(data);
-    setStatus('ok', 'Análise concluída');
-  } catch (err) {
-    console.error(err);
-    errorHint.textContent = err.message || 'Falha inesperada ao analisar a faixa.';
-    setStatus('error', 'Falha na análise');
-  } finally {
-    analyzeBtn.disabled = false;
-    analyzeBtnLabel.textContent = 'Analisar';
+  for (const stage of Object.keys(STAGE_LABELS)) {
+    source.addEventListener(stage, () => setStatus('loading', STAGE_LABELS[stage]));
   }
+
+  source.addEventListener('download_progress', (e) => {
+    const { percent } = JSON.parse(e.data);
+    if (typeof percent === 'number') {
+      setStatus('loading', `Baixando áudio (${percent.toFixed(0)}%)`);
+    }
+  });
+
+  source.addEventListener('done', (e) => {
+    const data = JSON.parse(e.data);
+    renderResult(data);
+    setStatus('ok', data.cached ? 'Análise concluída (cache)' : 'Análise concluída');
+    source.close();
+    finishAnalyze();
+  });
+
+  source.addEventListener('error', (e) => {
+    let message = 'Falha inesperada ao analisar a faixa.';
+    if (e.data) {
+      try {
+        const problem = JSON.parse(e.data);
+        message = problem.detail || problem.title || message;
+      } catch {
+        // not a JSON payload from our own 'error' event — likely a connection-level error
+      }
+    }
+    errorHint.textContent = message;
+    setStatus('error', 'Falha na análise');
+    source.close();
+    finishAnalyze();
+  });
 }
 
 function renderResult(data) {
