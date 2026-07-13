@@ -4,12 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { runAnalysis } from './services/analysisPipeline.js';
 import * as ytDlp from './services/ytDlpService.js';
+import * as reportGenerator from './services/reportGenerator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // session reports carry full spectrum arrays per track
 app.use(express.static(publicDir));
 
 function validateUrl(url) {
@@ -118,6 +119,38 @@ app.get('/api/analyze-playlist/stream', async (req, res) => {
 
   send('playlist_done', { total: entries.length, succeeded: results.filter((r) => r.ok).length });
   res.end();
+});
+
+// Exports a report from a client-held session (array of previous /api/analyze results —
+// there's no server-side session storage, the client just replays what it already has).
+app.post('/api/report', async (req, res) => {
+  const sessions = req.body?.sessions;
+  const format = req.query?.format === 'pdf' ? 'pdf' : 'csv';
+
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    res.status(400).json({ error: 'Informe ao menos uma sessão de análise em "sessions".' });
+    return;
+  }
+
+  if (format === 'csv') {
+    const csv = reportGenerator.toCsv(sessions);
+    res.status(200)
+      .set('Content-Type', 'text/csv; charset=utf-8')
+      .set('Content-Disposition', 'attachment; filename="cratescan-report.csv"')
+      .send(csv);
+    return;
+  }
+
+  try {
+    const pdf = await reportGenerator.toPdf(sessions);
+    res.status(200)
+      .set('Content-Type', 'application/pdf')
+      .set('Content-Disposition', 'attachment; filename="cratescan-report.pdf"')
+      .send(pdf);
+  } catch (err) {
+    console.error('Falha ao gerar PDF', err);
+    res.status(500).json({ title: 'Falha ao gerar relatório PDF', detail: err.message });
+  }
 });
 
 app.get('/api/health', (_req, res) => {

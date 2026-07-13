@@ -103,8 +103,12 @@ Suporte a playlist: `GET /api/analyze-playlist/stream?url=...` lista as faixas d
 de `/api/analyze`; eventos `track_*` (prefixados com `index`/`total`) reportam progresso por
 faixa, e uma falha numa faixa (`track_error`) não interrompe as demais.
 
+Exportar relatório: `POST /api/report?format=csv|pdf`, body `{ sessions: [...] }` com os
+resultados de `/api/analyze` já obtidos pelo cliente (sem storage no servidor — o cliente
+reenvia o que já tem em memória). Gera CSV (uma linha por faixa) ou PDF (uma seção por
+faixa, via `pdfkit`) como download.
+
 ## Ideias para as próximas iterações
 
-- Exportar relatório (PDF/CSV) de uma sessão de análise.
 - Dockerfile + docker-compose (com ffmpeg/yt-dlp já embutidos na imagem) para preparar o
   deploy no Railway.
