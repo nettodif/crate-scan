@@ -1,0 +1,4 @@
+node_modules
+.git
+public/spectrograms/*
+!public/spectrograms/.gitkeep

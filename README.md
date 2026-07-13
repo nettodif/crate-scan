@@ -95,8 +95,10 @@ create-scan/
   continua disponível (bloqueante) para clientes simples.
 - Sem persistência: nada é salvo em banco; cada análise é isolada (o cache em memória
   zera a cada restart do processo).
-- Roda em um único processo/porta local; ainda não há Dockerfile (fica para quando formos
-  falar de deploy no Railway/Cloudflare).
+- ~~Roda em um único processo/porta local; ainda não há Dockerfile~~ Resolvido: `Dockerfile`
+  (Node 20 + ffmpeg + yt-dlp standalone, sem dependência de Python) e `docker-compose.yml`
+  prontos — `docker compose up` já sobe o serviço na porta 5178, testado com download e
+  análise reais dentro do container.
 
 Suporte a playlist: `GET /api/analyze-playlist/stream?url=...` lista as faixas da playlist
 (via yt-dlp `--flat-playlist`) e analisa cada uma sequencialmente, reusando cache e pipeline
@@ -110,5 +112,8 @@ faixa, via `pdfkit`) como download.
 
 ## Ideias para as próximas iterações
 
-- Dockerfile + docker-compose (com ffmpeg/yt-dlp já embutidos na imagem) para preparar o
-  deploy no Railway.
+Todos os itens da v1 foram endereçados nesta rodada (cache, progresso via SSE, playlists,
+export de relatório, Dockerfile). Próximos candidatos ficam a critério da próxima sessão —
+ex.: persistência real (banco) se o cache em memória deixar de ser suficiente, deploy
+efetivo no Railway/Cloudflare usando a imagem já pronta, ou refinar a heurística de corte
+espectral em fronteiras (192kbps vs 224kbps).

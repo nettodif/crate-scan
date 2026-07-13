@@ -1,0 +1,12 @@
+services:
+  cratescan:
+    build: .
+    ports:
+      - "5178:5178"
+    environment:
+      - PORT=5178
+    volumes:
+      - spectrograms:/app/public/spectrograms
+
+volumes:
+  spectrograms:
