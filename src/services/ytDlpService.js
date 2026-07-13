@@ -62,6 +62,45 @@ export async function downloadAsync(url, info, { onProgress } = {}) {
   return { filePath, id, title, uploader, durationSec: duration };
 }
 
+/**
+ * Lists the entries of a playlist URL without downloading anything (flat-playlist).
+ * Returns one { id, url, title } per entry, in playlist order. Works for a plain
+ * (non-playlist) video URL too — resolves to a single-item array in that case.
+ */
+export async function fetchPlaylistEntriesAsync(url) {
+  const args = ['--flat-playlist', '--no-warnings', '--dump-json', url];
+  const result = await runAsync(config.ytDlpPath, args);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Falha ao listar playlist com yt-dlp (código ${result.exitCode}). Detalhe: ${result.stdErr}`);
+  }
+
+  const entries = result.stdOut
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry) => entry !== null)
+    .map((entry) => {
+      const id = entry.id ?? 'unknown';
+      const rawUrl = entry.webpage_url ?? entry.url ?? '';
+      const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : `https://www.youtube.com/watch?v=${id}`;
+      return { id, url: resolvedUrl, title: entry.title ?? 'Título desconhecido' };
+    });
+
+  if (entries.length === 0) {
+    throw new Error('yt-dlp não retornou nenhuma faixa para essa URL.');
+  }
+
+  return entries;
+}
+
 export async function fetchInfoAsync(url) {
   const args = ['--no-playlist', '--no-warnings', '--dump-json', url];
   const result = await runAsync(config.ytDlpPath, args);

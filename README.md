@@ -98,9 +98,13 @@ create-scan/
 - Roda em um único processo/porta local; ainda não há Dockerfile (fica para quando formos
   falar de deploy no Railway/Cloudflare).
 
+Suporte a playlist: `GET /api/analyze-playlist/stream?url=...` lista as faixas da playlist
+(via yt-dlp `--flat-playlist`) e analisa cada uma sequencialmente, reusando cache e pipeline
+de `/api/analyze`; eventos `track_*` (prefixados com `index`/`total`) reportam progresso por
+faixa, e uma falha numa faixa (`track_error`) não interrompe as demais.
+
 ## Ideias para as próximas iterações
 
-- Suporte a playlists (analisar várias faixas em lote).
 - Exportar relatório (PDF/CSV) de uma sessão de análise.
 - Dockerfile + docker-compose (com ffmpeg/yt-dlp já embutidos na imagem) para preparar o
   deploy no Railway.
