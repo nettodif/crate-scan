@@ -52,6 +52,20 @@ yt-dlp --version
 Se algum comando não estiver no PATH, ajuste os caminhos completos via variáveis de
 ambiente: `YTDLP_PATH`, `FFMPEG_PATH`, `FFPROBE_PATH`.
 
+### Usando uma conta logada (YouTube Music Premium) para bitrate mais alto
+
+Sem autenticação, o yt-dlp baixa como visitante anônimo e o YouTube só oferece os formatos
+padrão (~128kbps AAC/Opus) — mesmo que a faixa tenha um stream de bitrate maior disponível
+só para contas Premium. Pra desbloquear esses formatos, passe cookies de uma sessão logada:
+
+- `YTDLP_COOKIES_FILE=/caminho/cookies.txt` — exporte o cookies.txt do navegador logado na
+  conta Premium (extensão "Get cookies.txt LOCALLY" ou similar) e aponte o caminho.
+- `YTDLP_COOKIES_FROM_BROWSER=chrome` — alternativa: lê os cookies direto do navegador
+  instalado na máquina (aceita `firefox`, `edge`, etc., e opcionalmente `:perfil`).
+
+Com cookies válidos, o app já escolhe automaticamente o melhor formato disponível
+(`-f bestaudio/best`) — nenhuma configuração extra é necessária além dessas variáveis.
+
 ## Rodando localmente
 
 ```bash
