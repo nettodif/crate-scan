@@ -25,6 +25,24 @@
       </div>
     </header>
 
+    <section class="panel panel--auth">
+      <div class="auth__row">
+        <label class="btn btn--download auth__upload-btn">
+          <input type="file" id="cookiesFileInput" accept=".txt" hidden />
+          Enviar cookies.txt (Premium)
+        </label>
+        <span class="auth__status" id="cookiesStatus">Nenhum cookie ativo</span>
+        <button id="cookiesClearBtn" class="btn btn--download" hidden>Remover</button>
+        <button id="clearCacheBtn" class="btn btn--download">Limpar cache</button>
+      </div>
+      <p class="panel__hint auth__hint">
+        Exporte o cookies.txt de um navegador logado no YouTube Music Premium (extensão
+        "Get cookies.txt LOCALLY" ou similar) e envie aqui pra baixar em qualidade mais alta
+        quando disponível. Se você já analisou uma faixa antes de configurar o cookie,
+        "Limpar cache" força uma reanálise de verdade em vez de reusar o resultado antigo.
+      </p>
+    </section>
+
     <section class="panel panel--input">
       <label for="urlInput" class="panel__label">URL do YouTube / YouTube Music</label>
       <div class="input-row">
@@ -41,59 +59,87 @@
       <p class="panel__hint" id="errorHint"></p>
     </section>
 
-    <section class="panel panel--results" id="resultsPanel" hidden>
-
-      <div class="track-info">
-        <h2 id="trackTitle">—</h2>
-        <p id="trackUploader">—</p>
+    <section class="panel panel--playlist" id="playlistPanel" hidden>
+      <div class="playlist__header">
+        <label class="playlist__select-all">
+          <input type="checkbox" id="selectAllCheckbox" checked />
+          <span id="playlistCount">Playlist detectada</span>
+        </label>
+        <button id="analyzeSelectedBtn" class="btn btn--primary">Analisar selecionadas</button>
       </div>
-
-      <div class="meters">
-        <div class="meter">
-          <span class="meter__label">Codec</span>
-          <span class="meter__value" id="metricCodec">—</span>
-        </div>
-        <div class="meter">
-          <span class="meter__label">Bitrate declarado</span>
-          <span class="meter__value" id="metricBitrate">—</span>
-        </div>
-        <div class="meter">
-          <span class="meter__label">Sample rate</span>
-          <span class="meter__value" id="metricSampleRate">—</span>
-        </div>
-        <div class="meter">
-          <span class="meter__label">Canais</span>
-          <span class="meter__value" id="metricChannels">—</span>
-        </div>
-        <div class="meter">
-          <span class="meter__label">Corte espectral estimado</span>
-          <span class="meter__value" id="metricCutoff">—</span>
-        </div>
-        <div class="meter">
-          <span class="meter__label">Duração</span>
-          <span class="meter__value" id="metricDuration">—</span>
-        </div>
-      </div>
-
-      <div class="verdict" id="verdictBox" data-level="unknown">
-        <span class="verdict__badge" id="verdictBadge">—</span>
-        <p class="verdict__text" id="verdictText">—</p>
-      </div>
-
-      <div class="notes" id="notesBox" hidden></div>
-
-      <div class="scope">
-        <div class="scope__bezel">
-          <div class="scope__screw scope__screw--tl"></div>
-          <div class="scope__screw scope__screw--tr"></div>
-          <div class="scope__screw scope__screw--bl"></div>
-          <div class="scope__screw scope__screw--br"></div>
-          <div class="scope__label">ESPECTROGRAMA — 0Hz A NYQUIST</div>
-          <img id="spectrogramImg" class="scope__img" alt="Espectrograma da faixa" />
-        </div>
-      </div>
-
+      <div class="playlist__list" id="playlistList"></div>
     </section>
+
+    <section class="panel panel--results" id="resultsPanel" hidden>
+      <div id="resultsList"></div>
+    </section>
+
+    <template id="trackCardTemplate">
+      <article class="track-card">
+        <div class="track-info">
+          <div>
+            <h2 class="js-title">—</h2>
+            <p class="js-uploader">—</p>
+          </div>
+          <div class="track-info__actions">
+            <button class="btn btn--download js-clear-cache-btn">Limpar cache</button>
+            <a class="btn btn--download js-download-link" download hidden>Baixar áudio</a>
+          </div>
+        </div>
+
+        <div class="meters">
+          <div class="meter">
+            <span class="meter__label">Codec</span>
+            <span class="meter__value js-codec">—</span>
+          </div>
+          <div class="meter">
+            <span class="meter__label">Bitrate declarado</span>
+            <span class="meter__value js-bitrate">—</span>
+          </div>
+          <div class="meter">
+            <span class="meter__label">Sample rate</span>
+            <span class="meter__value js-samplerate">—</span>
+          </div>
+          <div class="meter">
+            <span class="meter__label">Canais</span>
+            <span class="meter__value js-channels">—</span>
+          </div>
+          <div class="meter">
+            <span class="meter__label">Corte espectral estimado</span>
+            <span class="meter__value js-cutoff">—</span>
+          </div>
+          <div class="meter">
+            <span class="meter__label">Duração</span>
+            <span class="meter__value js-duration">—</span>
+          </div>
+        </div>
+
+        <div class="verdict js-verdict" data-level="unknown">
+          <span class="verdict__badge js-verdict-badge">—</span>
+          <p class="verdict__text js-verdict-text">—</p>
+        </div>
+
+        <div class="notes js-notes" hidden></div>
+
+        <div class="scope">
+          <div class="scope__bezel">
+            <div class="scope__screw scope__screw--tl"></div>
+            <div class="scope__screw scope__screw--tr"></div>
+            <div class="scope__screw scope__screw--bl"></div>
+            <div class="scope__screw scope__screw--br"></div>
+            <div class="scope__label">ESPECTROGRAMA — 0Hz A NYQUIST</div>
+            <div class="scope__canvas">
+              <img class="scope__img js-spectrogram" alt="Espectrograma da faixa" />
+              <div class="scope__axis-y js-axis-y"></div>
+              <div class="scope__axis-x js-axis-x"></div>
+              <div class="scope__cutoff-line js-cutoff-line">
+                <span class="scope__cutoff-label js-cutoff-label"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </template>
 
   </div>
 

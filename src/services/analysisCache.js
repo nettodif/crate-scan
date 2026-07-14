@@ -17,3 +17,11 @@ export function get(videoId) {
 export function set(videoId, result, ttlMs = DEFAULT_TTL_MS) {
   store.set(videoId, { result, expiresAt: Date.now() + ttlMs });
 }
+
+export function clear(videoId) {
+  store.delete(videoId);
+}
+
+export function clearAll() {
+  store.clear();
+}

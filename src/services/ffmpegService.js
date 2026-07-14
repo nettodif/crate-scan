@@ -9,6 +9,36 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', '..', 'public');
 const spectrogramDir = path.join(publicDir, 'spectrograms');
 
+// yt-dlp's "bestaudio" often lands on an Opus stream muxed into a .webm container
+// (itag 251) — bit-for-bit fine for analysis, but an awkward extension for a user to
+// download and open. Remux (stream copy, no re-encode) into a container extension that
+// matches the codec, so the downloaded file plays anywhere without touching quality.
+const CODEC_TO_CONTAINER_EXT = {
+  opus: 'opus',
+  vorbis: 'ogg',
+  aac: 'm4a',
+  mp3: 'mp3',
+  flac: 'flac',
+};
+
+export async function remuxForDownloadAsync(filePath, codecName) {
+  const targetExt = CODEC_TO_CONTAINER_EXT[codecName];
+  const currentExt = path.extname(filePath).slice(1).toLowerCase();
+  if (!targetExt || targetExt === currentExt) return filePath;
+
+  const outputPath = filePath.slice(0, -currentExt.length) + targetExt;
+  const args = ['-y', '-i', filePath, '-vn', '-acodec', 'copy', outputPath];
+
+  const result = await runAsync(config.ffmpegPath, args);
+  try {
+    await fs.access(outputPath);
+  } catch {
+    console.error(`Remux para download falhou, mantendo arquivo original: ${result.stdErr}`);
+    return filePath;
+  }
+  return outputPath;
+}
+
 export async function getMetadataAsync(filePath) {
   const args = [
     '-v', 'quiet',
@@ -51,6 +81,9 @@ export async function getMetadataAsync(filePath) {
 
 /**
  * Renders a spectrogram PNG (frequency vs time, intensity = energy) using ffmpeg's showspectrumpic filter.
+ * legend=0 keeps the image as pure spectrogram data (no native ffmpeg axis) — the
+ * frontend draws its own axis/cutoff overlay on top, since it knows the exact
+ * cutoffHz our own analysis computed (something ffmpeg's legend can't show).
  * Returns a web-relative URL (served from public/spectrograms).
  */
 export async function generateSpectrogramAsync(filePath, id) {
@@ -62,7 +95,7 @@ export async function generateSpectrogramAsync(filePath, id) {
   const args = [
     '-y',
     '-i', filePath,
-    '-lavfi', 'showspectrumpic=s=1024x512:mode=combined:color=intensity:scale=log',
+    '-lavfi', 'showspectrumpic=s=1200x600:mode=combined:color=intensity:scale=log:legend=0',
     '-frames:v', '1',
     outputPath,
   ];

@@ -5,8 +5,12 @@ services:
       - "5178:5178"
     environment:
       - PORT=5178
+      - YTDLP_COOKIES_FILE=${YTDLP_COOKIES_FILE:-}
     volumes:
       - spectrograms:/app/public/spectrograms
+      - ${YTDLP_COOKIES_HOST_PATH:-/dev/null}:/app/cookies.txt:ro
+      - cookies_data:/app/data/auth
 
 volumes:
   spectrograms:
+  cookies_data:
