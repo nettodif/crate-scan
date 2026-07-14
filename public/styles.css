@@ -202,6 +202,32 @@ body {
   min-height: 16px;
 }
 
+/* ---------- Auth (cookies upload) ---------- */
+
+.panel--auth {
+  padding: 14px 20px;
+}
+
+.auth__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.auth__upload-btn {
+  cursor: pointer;
+}
+
+.auth__status {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.auth__hint {
+  color: var(--text-muted);
+}
+
 /* ---------- Playlist selection ---------- */
 
 .panel--playlist {
@@ -323,6 +349,13 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.track-info__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .btn--download {

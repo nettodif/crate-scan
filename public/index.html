@@ -25,6 +25,24 @@
       </div>
     </header>
 
+    <section class="panel panel--auth">
+      <div class="auth__row">
+        <label class="btn btn--download auth__upload-btn">
+          <input type="file" id="cookiesFileInput" accept=".txt" hidden />
+          Enviar cookies.txt (Premium)
+        </label>
+        <span class="auth__status" id="cookiesStatus">Nenhum cookie ativo</span>
+        <button id="cookiesClearBtn" class="btn btn--download" hidden>Remover</button>
+        <button id="clearCacheBtn" class="btn btn--download">Limpar cache</button>
+      </div>
+      <p class="panel__hint auth__hint">
+        Exporte o cookies.txt de um navegador logado no YouTube Music Premium (extensão
+        "Get cookies.txt LOCALLY" ou similar) e envie aqui pra baixar em qualidade mais alta
+        quando disponível. Se você já analisou uma faixa antes de configurar o cookie,
+        "Limpar cache" força uma reanálise de verdade em vez de reusar o resultado antigo.
+      </p>
+    </section>
+
     <section class="panel panel--input">
       <label for="urlInput" class="panel__label">URL do YouTube / YouTube Music</label>
       <div class="input-row">
@@ -63,7 +81,10 @@
             <h2 class="js-title">—</h2>
             <p class="js-uploader">—</p>
           </div>
-          <a class="btn btn--download js-download-link" download hidden>Baixar áudio</a>
+          <div class="track-info__actions">
+            <button class="btn btn--download js-clear-cache-btn">Limpar cache</button>
+            <a class="btn btn--download js-download-link" download hidden>Baixar áudio</a>
+          </div>
         </div>
 
         <div class="meters">

@@ -15,6 +15,11 @@ const resultsPanel = document.getElementById('resultsPanel');
 const resultsList = document.getElementById('resultsList');
 const trackCardTemplate = document.getElementById('trackCardTemplate');
 
+const cookiesFileInput = document.getElementById('cookiesFileInput');
+const cookiesStatus = document.getElementById('cookiesStatus');
+const cookiesClearBtn = document.getElementById('cookiesClearBtn');
+const clearCacheBtn = document.getElementById('clearCacheBtn');
+
 const FREQ_TICKS_HZ = [0, 5000, 10000, 15000, 20000];
 
 const LEVEL_LABELS = {
@@ -113,6 +118,7 @@ function analyzeTrack(url, { onStage } = {}) {
 function renderTrackCard(data) {
   const fragment = trackCardTemplate.content.cloneNode(true);
   const card = fragment.querySelector('.track-card');
+  card.dataset.videoId = data.videoId || '';
 
   card.querySelector('.js-title').textContent = data.title || 'Faixa sem título';
   card.querySelector('.js-uploader').textContent = data.uploader ? `por ${data.uploader}` : '';
@@ -152,6 +158,9 @@ function renderTrackCard(data) {
     downloadLink.download = `${(data.title || 'faixa').replace(/[\\/:*?"<>|]+/g, '_')}`;
     downloadLink.hidden = false;
   }
+
+  const clearCacheForTrackBtn = card.querySelector('.js-clear-cache-btn');
+  clearCacheForTrackBtn.addEventListener('click', () => clearCacheForVideo(data.videoId, clearCacheForTrackBtn));
 
   resultsList.appendChild(fragment);
   resultsPanel.hidden = false;
@@ -307,6 +316,80 @@ async function analyzeTracks(entries) {
   setBusy(false, 'Análise concluída');
 }
 
+function updateCookiesStatus(hasCookies, label) {
+  cookiesStatus.textContent = label || (hasCookies ? 'Cookie ativo — baixando como conta logada' : 'Nenhum cookie ativo');
+  cookiesClearBtn.hidden = !hasCookies;
+}
+
+async function refreshCookiesStatus() {
+  try {
+    const res = await fetch('/api/cookies/status');
+    const body = await res.json();
+    updateCookiesStatus(!!body.hasCookies, body.hasCookies ? 'Cookie ativo — baixando como conta logada' : null);
+  } catch {
+    // best-effort — leave the default "no cookie" status if this fails
+  }
+}
+
+async function uploadCookiesFile(file) {
+  const content = await file.text();
+  cookiesStatus.textContent = 'Enviando cookies…';
+
+  try {
+    const res = await fetch('/api/cookies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: content,
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || body.error || 'Falha ao enviar cookies.');
+    updateCookiesStatus(true, 'Cookie enviado ativo — baixando como conta logada');
+  } catch (err) {
+    errorHint.textContent = err.message;
+    updateCookiesStatus(false);
+  }
+}
+
+async function clearCookies() {
+  try {
+    await fetch('/api/cookies', { method: 'DELETE' });
+  } finally {
+    updateCookiesStatus(false);
+  }
+}
+
+async function clearCacheForVideo(videoId, button) {
+  if (!videoId) return;
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Limpando…';
+
+  try {
+    await fetch(`/api/cache/${encodeURIComponent(videoId)}`, { method: 'DELETE' });
+    button.textContent = 'Cache limpo ✓';
+  } catch {
+    button.textContent = originalLabel;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function clearAllCache() {
+  const originalLabel = clearCacheBtn.textContent;
+  clearCacheBtn.disabled = true;
+  clearCacheBtn.textContent = 'Limpando…';
+
+  try {
+    await fetch('/api/cache', { method: 'DELETE' });
+    clearCacheBtn.textContent = 'Cache limpo ✓';
+    setTimeout(() => { clearCacheBtn.textContent = originalLabel; }, 2000);
+  } catch {
+    clearCacheBtn.textContent = originalLabel;
+  } finally {
+    clearCacheBtn.disabled = false;
+  }
+}
+
 analyzeBtn.addEventListener('click', analyze);
 urlInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') analyze();
@@ -319,3 +402,13 @@ selectAllCheckbox.addEventListener('change', () => {
     cb.checked = selectAllCheckbox.checked;
   });
 });
+
+cookiesFileInput.addEventListener('change', () => {
+  const file = cookiesFileInput.files[0];
+  if (file) uploadCookiesFile(file);
+  cookiesFileInput.value = '';
+});
+cookiesClearBtn.addEventListener('click', clearCookies);
+clearCacheBtn.addEventListener('click', clearAllCache);
+
+refreshCookiesStatus();

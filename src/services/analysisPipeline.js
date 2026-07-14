@@ -55,6 +55,13 @@ export async function runAnalysis(url, { onProgress } = {}) {
 
     const notes = [];
 
+    if (download.cookieInvalid) {
+      notes.push(
+        'Atenção: o cookie configurado não é mais válido (expirado ou rotacionado pelo YouTube) — ' +
+        'essa análise rodou sem autenticação, como visitante anônimo. Exporte um cookies.txt novo e reenvie.'
+      );
+    }
+
     // Cross-check: does the declared bitrate roughly match what the spectrum suggests?
     if (metadata.declaredBitrateBps > 0) {
       const declaredKbps = metadata.declaredBitrateBps / 1000.0;
@@ -95,6 +102,7 @@ export async function runAnalysis(url, { onProgress } = {}) {
     }
 
     result = {
+      videoId: info.id,
       title: download.title,
       uploader: download.uploader,
       sourceUrl: url,
