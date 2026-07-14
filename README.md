@@ -105,55 +105,83 @@ clique em **Analisar**.
 
 > A porta é `5178` por padrão; mude com a variável de ambiente `PORT`.
 
+## Rodando com Docker
+
+Não precisa instalar Node, ffmpeg nem yt-dlp na máquina — tudo já vem na imagem
+(`Dockerfile`: Node 20 + ffmpeg + yt-dlp standalone). Só precisa de Docker + Docker
+Compose.
+
+```bash
+docker compose up --build
+```
+
+Abre em `http://localhost:5178`. Pra rodar em background: `docker compose up -d --build`.
+Pra parar: `docker compose down` (os volumes continuam — os dados não somem entre
+restarts; use `docker compose down -v` se quiser apagar tudo).
+
+O `docker-compose.yml` já vem com dois volumes nomeados que persistem entre restarts:
+
+- `spectrograms` — imagens de espectrograma geradas (`/app/public/spectrograms`).
+- `cookies_data` — cookies.txt enviado pela UI (`/app/data/auth`). O upload pelo botão
+  "Enviar cookies.txt (Premium)" funciona exatamente igual ao rodando local — é o jeito
+  recomendado de configurar autenticação em Docker (veja a seção acima).
+
+Pra mudar a porta exposta no host, edite o mapeamento `ports` em `docker-compose.yml`
+(ex. `"8080:5178"`).
+
+Se preferir pré-configurar um cookie sem passar pela UI (ex. automatizando o deploy),
+dá pra montar um cookies.txt do host direto, sem precisar entrar na UI depois de subir:
+
+```bash
+YTDLP_COOKIES_HOST_PATH=/caminho/no/host/cookies.txt YTDLP_COOKIES_FILE=/app/cookies.txt \
+  docker compose up --build
+```
+
 ## Estrutura do projeto
 
 ```
 create-scan/
   src/
     server.js                   # Express app: rotas + orquestração da análise
-    config.js                    # caminhos das ferramentas externas + porta
+    config.js                    # caminhos das ferramentas externas, porta, cookies
     services/
-      ytDlpService.js             # download via yt-dlp
-      ffmpegService.js            # metadados + espectrograma + decodificação PCM
+      ytDlpService.js             # download/listagem via yt-dlp + autenticação por cookie
+      ffmpegService.js            # metadados + espectrograma + decodificação PCM + remux
       spectrumAnalyzer.js         # FFT e heurística de corte espectral
+      analysisPipeline.js         # orquestra download → metadados → espectro → veredito
+      analysisCache.js            # cache em memória por videoId (TTL 1h)
+      downloadStore.js            # mantém o áudio baixado disponível pra download local
+      cookieStore.js              # cookies.txt enviado pela UI
+      reportGenerator.js          # export de relatório em CSV/PDF
       processRunner.js            # helper para rodar processos externos
   public/
     index.html / styles.css / app.js   # frontend (HTML/CSS/JS puro, sem build step)
 ```
 
-## Limitações conhecidas da v1 (próximas iterações)
+## Funcionalidades
+
+- **Streaming de progresso**: `GET /api/analyze/stream?url=...` expõe a análise via
+  Server-Sent Events, emitindo estágios (`download_start`, `download_progress`,
+  `metadata_start`, `spectrogram_start`, `fft_start`, `done`/`error`) — o frontend consome
+  via `EventSource`. `POST /api/analyze` (bloqueante) também está disponível.
+- **Playlist com seleção**: colar uma URL de playlist lista as faixas primeiro (via yt-dlp
+  `--flat-playlist`, sem baixar nada) pra você escolher quais analisar antes de qualquer
+  download. `GET /api/analyze-playlist/stream?url=...` também existe como endpoint separado
+  que analisa a playlist inteira automaticamente (não é o fluxo usado pela UI hoje).
+- **Download local**: depois de analisada, a faixa fica disponível pra baixar
+  (`GET /api/download/:id`), remuxada pra uma extensão compatível com o codec real (sem
+  reencode) — ver seção de cookies acima pra qualidade mais alta.
+- **Cache de análise**: resultado fica em memória por `videoId` (TTL 1h); "Limpar cache" na
+  UI invalida uma faixa específica ou tudo, útil depois de configurar/trocar um cookie.
+- **Exportar relatório**: `POST /api/report?format=csv|pdf`, body `{ sessions: [...] }` com
+  resultados de `/api/analyze` já obtidos pelo cliente (sem storage no servidor). Gera CSV
+  (uma linha por faixa) ou PDF (uma seção por faixa, via `pdfkit`).
+
+## Limitações conhecidas
 
 - O "corte espectral" é uma heurística (limiar de -24dB abaixo da banda de referência
   1-5kHz). Funciona bem para casos claros (128kbps vs lossless), mas pode ser impreciso em
   fronteiras (ex.: 192kbps vs 224kbps).
-- ~~Cada análise baixa o áudio do zero (sem cache); faixas longas demoram mais.~~ Resolvido:
-  há cache em memória por `videoId` (TTL 1h, ver `src/services/analysisCache.js`) — uma
-  segunda análise da mesma faixa retorna instantânea com `cached: true`.
-- ~~Sem fila/streaming de progresso — a requisição fica bloqueada até terminar.~~ Resolvido:
-  `GET /api/analyze/stream?url=...` expõe a mesma análise via Server-Sent Events, emitindo
-  estágios (`download_start`, `download_progress`, `metadata_start`, `spectrogram_start`,
-  `fft_start`, `done`/`error`) — o frontend consome via `EventSource`. `POST /api/analyze`
-  continua disponível (bloqueante) para clientes simples.
-- Sem persistência: nada é salvo em banco; cada análise é isolada (o cache em memória
-  zera a cada restart do processo).
-- ~~Roda em um único processo/porta local; ainda não há Dockerfile~~ Resolvido: `Dockerfile`
-  (Node 20 + ffmpeg + yt-dlp standalone, sem dependência de Python) e `docker-compose.yml`
-  prontos — `docker compose up` já sobe o serviço na porta 5178, testado com download e
-  análise reais dentro do container.
-
-Suporte a playlist: `GET /api/analyze-playlist/stream?url=...` lista as faixas da playlist
-(via yt-dlp `--flat-playlist`) e analisa cada uma sequencialmente, reusando cache e pipeline
-de `/api/analyze`; eventos `track_*` (prefixados com `index`/`total`) reportam progresso por
-faixa, e uma falha numa faixa (`track_error`) não interrompe as demais.
-
-Exportar relatório: `POST /api/report?format=csv|pdf`, body `{ sessions: [...] }` com os
-resultados de `/api/analyze` já obtidos pelo cliente (sem storage no servidor — o cliente
-reenvia o que já tem em memória). Gera CSV (uma linha por faixa) ou PDF (uma seção por
-faixa, via `pdfkit`) como download.
-
-## Ideias para as próximas iterações
-
-Todos os itens da v1 foram endereçados nesta rodada (cache, progresso via SSE, playlists,
-export de relatório, Dockerfile). Próximos candidatos ficam a critério da próxima sessão —
-ex.: persistência real (banco) se o cache em memória deixar de ser suficiente, ou refinar a
-heurística de corte espectral em fronteiras (192kbps vs 224kbps).
+- Sem persistência: nada é salvo em banco; cache e cookie ficam em memória/disco do
+  processo (cache zera a cada restart; cookie sobrevive se `data/`/`cookies_data` estiver
+  num volume persistente).
