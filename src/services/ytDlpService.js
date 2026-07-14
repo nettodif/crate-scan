@@ -14,6 +14,16 @@ const tempRoot = path.join(os.tmpdir(), 'cratescan');
  */
 const DOWNLOAD_PROGRESS_RE = /\[download\]\s+([\d.]+)%/;
 
+/**
+ * Auth args for yt-dlp so it can act as a logged-in (e.g. YouTube Music Premium)
+ * session, unlocking higher-bitrate formats when available.
+ */
+function authArgs() {
+  if (config.ytDlpCookiesFile) return ['--cookies', config.ytDlpCookiesFile];
+  if (config.ytDlpCookiesFromBrowser) return ['--cookies-from-browser', config.ytDlpCookiesFromBrowser];
+  return [];
+}
+
 export async function downloadAsync(url, info, { onProgress } = {}) {
   await fs.mkdir(tempRoot, { recursive: true });
 
@@ -28,8 +38,10 @@ export async function downloadAsync(url, info, { onProgress } = {}) {
     '--no-playlist',
     '--no-warnings',
     '--newline',
+    ...authArgs(),
     '-o', outputTemplate,
     '--print', 'after_move:filepath',
+    '--print', 'after_move:%(acodec)s|%(abr)s|%(ext)s',
     url,
   ];
 
@@ -46,20 +58,35 @@ export async function downloadAsync(url, info, { onProgress } = {}) {
     throw new Error(`Falha ao baixar áudio com yt-dlp (código ${result.exitCode}). Detalhe: ${result.stdErr}`);
   }
 
-  const filePath = result.stdOut
+  const lines = result.stdOut
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .reverse()
-    .find((line) => existsSync(line));
+    .filter((line) => line.length > 0);
+
+  const filePath = lines.slice().reverse().find((line) => existsSync(line));
 
   if (!filePath) {
     throw new Error(`yt-dlp concluiu, mas o arquivo de áudio não foi encontrado. Saída: ${result.stdOut}`);
   }
 
+  // Native format yt-dlp actually picked (acodec/abr/ext), so we can later cross-check
+  // it against what ffprobe measures on the downloaded file (see analysisPipeline.js) —
+  // catches cases where the "declared" bitrate was inflated by a re-encode/remux.
+  const sourceFormat = parseSourceFormatLine(lines.find((line) => line.includes('|') && !existsSync(line)));
+
   const { title, uploader, duration, id } = info ?? await fetchInfoAsync(url);
 
-  return { filePath, id, title, uploader, durationSec: duration };
+  return { filePath, id, title, uploader, durationSec: duration, sourceFormat };
+}
+
+function parseSourceFormatLine(line) {
+  if (!line) return null;
+  const [acodec, abr, ext] = line.split('|');
+  return {
+    acodec: acodec && acodec !== 'NA' ? acodec : null,
+    abrKbps: abr && abr !== 'NA' && !Number.isNaN(Number(abr)) ? Number(abr) : null,
+    ext: ext && ext !== 'NA' ? ext : null,
+  };
 }
 
 /**
@@ -68,7 +95,7 @@ export async function downloadAsync(url, info, { onProgress } = {}) {
  * (non-playlist) video URL too — resolves to a single-item array in that case.
  */
 export async function fetchPlaylistEntriesAsync(url) {
-  const args = ['--flat-playlist', '--no-warnings', '--dump-json', url];
+  const args = ['--flat-playlist', '--no-warnings', ...authArgs(), '--dump-json', url];
   const result = await runAsync(config.ytDlpPath, args);
 
   if (result.exitCode !== 0) {
@@ -102,7 +129,7 @@ export async function fetchPlaylistEntriesAsync(url) {
 }
 
 export async function fetchInfoAsync(url) {
-  const args = ['--no-playlist', '--no-warnings', '--dump-json', url];
+  const args = ['--no-playlist', '--no-warnings', ...authArgs(), '--dump-json', url];
   const result = await runAsync(config.ytDlpPath, args);
 
   if (result.exitCode !== 0) {

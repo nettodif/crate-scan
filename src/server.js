@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { runAnalysis } from './services/analysisPipeline.js';
 import * as ytDlp from './services/ytDlpService.js';
 import * as reportGenerator from './services/reportGenerator.js';
+import * as downloadStore from './services/downloadStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
@@ -30,6 +31,25 @@ app.post('/api/analyze', async (req, res) => {
   } catch (err) {
     console.error('Falha na análise', err);
     res.status(err.httpStatus ?? 500).json({ title: err.title ?? 'Falha ao analisar o áudio', detail: err.message });
+  }
+});
+
+// Lists a playlist's entries (or resolves a single-video URL to a 1-item array)
+// without downloading/analyzing anything, so the client can let the user pick
+// which tracks to actually analyze.
+app.get('/api/playlist/entries', async (req, res) => {
+  const url = req.query?.url;
+  if (!validateUrl(url)) {
+    res.status(400).json({ error: 'Informe uma URL do YouTube ou YouTube Music.' });
+    return;
+  }
+
+  try {
+    const entries = await ytDlp.fetchPlaylistEntriesAsync(url);
+    res.status(200).json({ entries });
+  } catch (err) {
+    console.error('Falha ao listar faixas', err);
+    res.status(502).json({ error: 'Falha ao listar faixas da URL informada.', detail: err.message });
   }
 });
 
@@ -151,6 +171,21 @@ app.post('/api/report', async (req, res) => {
     console.error('Falha ao gerar PDF', err);
     res.status(500).json({ title: 'Falha ao gerar relatório PDF', detail: err.message });
   }
+});
+
+// Serves the audio file downloaded during analysis for the given video id, so the
+// user can save it locally. The file only lives as long as downloadStore's TTL
+// (same 1h window as analysisCache) — after that it's cleaned up and this 404s.
+app.get('/api/download/:id', (req, res) => {
+  const entry = downloadStore.get(req.params.id);
+  if (!entry) {
+    res.status(404).json({ error: 'Arquivo não está mais disponível para download. Analise a faixa novamente.' });
+    return;
+  }
+
+  res.download(entry.filePath, entry.fileName, (err) => {
+    if (err) console.error('Falha ao enviar arquivo para download', err);
+  });
 });
 
 app.get('/api/health', (_req, res) => {

@@ -1,7 +1,9 @@
+import path from 'node:path';
 import * as ytDlp from './ytDlpService.js';
 import * as ffmpeg from './ffmpegService.js';
 import * as spectrumAnalyzer from './spectrumAnalyzer.js';
 import * as analysisCache from './analysisCache.js';
+import * as downloadStore from './downloadStore.js';
 
 /**
  * Runs the full download + analysis pipeline for a URL, emitting stage events
@@ -70,6 +72,24 @@ export async function runAnalysis(url, { onProgress } = {}) {
       notes.push('O container não expôs um bitrate declarado explícito; use o corte espectral como referência principal.');
     }
 
+    // Cross-check: o bitrate medido no arquivo baixado bate com o que o YouTube informou
+    // pra esse formato nativo? Se o medido vier bem maior, o arquivo foi reencodado/remuxado
+    // após o download original (ex.: Opus ~160kbps convertido pra AAC em qualidade alta) —
+    // isso infla o número sem ganho real de qualidade, o mesmo problema que o corte espectral
+    // tenta desmascarar.
+    const source = download.sourceFormat;
+    if (source?.abrKbps && metadata.declaredBitrateBps > 0) {
+      const measuredKbps = metadata.declaredBitrateBps / 1000;
+      if (measuredKbps > source.abrKbps * 1.15) {
+        notes.push(
+          `Atenção: bitrate medido no arquivo (${measuredKbps.toFixed(0)}kbps) é maior que o bitrate da ` +
+          `fonte nativa informada pelo YouTube (${source.abrKbps.toFixed(0)}kbps, codec ${source.acodec ?? 'desconhecido'}). ` +
+          'Isso sugere que o arquivo foi reencodado/convertido depois do download original, inflando o ' +
+          'bitrate declarado sem ganho real de qualidade.'
+        );
+      }
+    }
+
     if (metadata.sampleRateHz < 44100) {
       notes.push(`Sample rate de ${metadata.sampleRateHz}Hz está abaixo do padrão de CD/streaming (44.1kHz).`);
     }
@@ -84,16 +104,25 @@ export async function runAnalysis(url, { onProgress } = {}) {
       overallVerdict: spectrum.verdict,
       overallVerdictLevel: spectrum.verdictLevel,
       notes,
+      downloadUrl: `/api/download/${info.id}`,
     };
 
     analysisCache.set(info.id, result);
+
+    const downloadFilePath = await ffmpeg.remuxForDownloadAsync(download.filePath, metadata.codecName);
+    downloadStore.set(info.id, downloadFilePath, buildDownloadFileName(download, downloadFilePath));
   } catch (err) {
-    throw taggedError(err, 500, 'Falha ao analisar o áudio');
-  } finally {
     await ytDlp.cleanupTempFile(download.filePath);
+    throw taggedError(err, 500, 'Falha ao analisar o áudio');
   }
 
   return result;
+}
+
+function buildDownloadFileName(download, downloadFilePath) {
+  const ext = path.extname(downloadFilePath).slice(1) || 'm4a';
+  const safeTitle = (download.title || 'faixa').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 150) || 'faixa';
+  return `${safeTitle}.${ext}`;
 }
 
 function taggedError(err, httpStatus, title) {
