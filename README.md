@@ -56,15 +56,42 @@ ambiente: `YTDLP_PATH`, `FFMPEG_PATH`, `FFPROBE_PATH`.
 
 Sem autenticação, o yt-dlp baixa como visitante anônimo e o YouTube só oferece os formatos
 padrão (~128kbps AAC/Opus) — mesmo que a faixa tenha um stream de bitrate maior disponível
-só para contas Premium. Pra desbloquear esses formatos, passe cookies de uma sessão logada:
+só para contas Premium. Pra desbloquear esses formatos, passe cookies de uma sessão logada,
+por um dos dois jeitos abaixo (o primeiro que estiver configurado vence):
 
-- `YTDLP_COOKIES_FILE=/caminho/cookies.txt` — exporte o cookies.txt do navegador logado na
-  conta Premium (extensão "Get cookies.txt LOCALLY" ou similar) e aponte o caminho.
-- `YTDLP_COOKIES_FROM_BROWSER=chrome` — alternativa: lê os cookies direto do navegador
-  instalado na máquina (aceita `firefox`, `edge`, etc., e opcionalmente `:perfil`).
+1. **Upload pela UI** (recomendado, funciona em qualquer lugar incluindo Docker/deploy
+   remoto): exporte o cookies.txt de um navegador logado na conta Premium (extensão "Get
+   cookies.txt LOCALLY" ou similar) e envie pelo botão "Enviar cookies.txt (Premium)" no
+   topo da página. O servidor valida o arquivo na hora (roda uma checagem rápida com
+   yt-dlp) e rejeita com mensagem clara se o export estiver expirado ou corrompido, em vez
+   de só falhar depois na hora de analisar uma faixa de verdade.
+2. `YTDLP_COOKIES_FILE=/caminho/cookies.txt` — mesma ideia, mas apontando o caminho direto
+   via variável de ambiente em vez de subir pela UI.
+
+Os dois métodos acabam apontando pra um cookies.txt salvo em `COOKIES_DIR` (padrão
+`/app/data/auth` — monte um volume aí, como já vem configurado no `docker-compose.yml`,
+pra persistir entre restarts). Como cada container serve um usuário só, não há risco de um
+cookie vazar pra outra pessoa.
+
+> Não há um jeito confiável de ler os cookies direto do navegador instalado (via
+> `--cookies-from-browser`): no Windows, o Chrome mantém o próprio arquivo de cookies
+> travado enquanto está rodando ([yt-dlp#7271](https://github.com/yt-dlp/yt-dlp/issues/7271)),
+> então essa abordagem falha com frequência — o export manual (opção 1 acima) é o caminho
+> confiável.
+
+Se `Requested format is not available`/`No video formats found!` aparecer numa faixa real
+mesmo com um cookies.txt válido, primeiro confirme que o yt-dlp está atualizado (`pip
+install -U yt-dlp` local, ou rebuild da imagem Docker — o `Dockerfile` já baixa o release
+mais recente no build). Se persistir só com cookie ativo (sem cookie funciona normal): com
+autenticação, o YouTube muda o client usado pelo yt-dlp pra um que exige resolver um
+"desafio n" via runtime JavaScript, e o yt-dlp só confia em Deno por padrão — sem isso, todo
+formato é descartado. O app já contorna isso sozinho, apontando o yt-dlp pro mesmo binário
+Node.js que roda o próprio CrateScan (`--js-runtimes node:<caminho do node>`), sem precisar
+instalar nada a mais. Se for rodar yt-dlp manualmente fora do app, adicione
+`--js-runtimes node` (ou instale o [Deno](https://deno.com/)) no comando.
 
 Com cookies válidos, o app já escolhe automaticamente o melhor formato disponível
-(`-f bestaudio/best`) — nenhuma configuração extra é necessária além dessas variáveis.
+(`-f bestaudio/best`) — nenhuma configuração extra é necessária além do acima.
 
 ## Rodando localmente
 
@@ -128,6 +155,5 @@ faixa, via `pdfkit`) como download.
 
 Todos os itens da v1 foram endereçados nesta rodada (cache, progresso via SSE, playlists,
 export de relatório, Dockerfile). Próximos candidatos ficam a critério da próxima sessão —
-ex.: persistência real (banco) se o cache em memória deixar de ser suficiente, deploy
-efetivo no Railway/Cloudflare usando a imagem já pronta, ou refinar a heurística de corte
-espectral em fronteiras (192kbps vs 224kbps).
+ex.: persistência real (banco) se o cache em memória deixar de ser suficiente, ou refinar a
+heurística de corte espectral em fronteiras (192kbps vs 224kbps).
