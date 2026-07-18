@@ -29,22 +29,27 @@
       <div class="auth__row">
         <label class="btn btn--download auth__upload-btn">
           <input type="file" id="cookiesFileInput" accept=".txt" hidden />
-          Enviar cookies.txt (Premium)
+          Enviar cookies.txt
         </label>
         <span class="auth__status" id="cookiesStatus">Nenhum cookie ativo</span>
         <button id="cookiesClearBtn" class="btn btn--download" hidden>Remover</button>
         <button id="clearCacheBtn" class="btn btn--download">Limpar cache</button>
       </div>
       <p class="panel__hint auth__hint">
-        Exporte o cookies.txt de um navegador logado no YouTube Music Premium (extensão
-        "Get cookies.txt LOCALLY" ou similar) e envie aqui pra baixar em qualidade mais alta
-        quando disponível. Se você já analisou uma faixa antes de configurar o cookie,
-        "Limpar cache" força uma reanálise de verdade em vez de reusar o resultado antigo.
+        Exporte o cookies.txt de um navegador logado (YouTube Music Premium, pra desbloquear
+        bitrate mais alto, ou SoundCloud, pra acessar faixas privadas — extensão
+        "Get cookies.txt LOCALLY" ou similar) e envie aqui. Se você já analisou uma faixa
+        antes de configurar o cookie, "Limpar cache" força uma reanálise de verdade em vez
+        de reusar o resultado antigo.
       </p>
     </section>
 
     <section class="panel panel--input">
-      <label for="urlInput" class="panel__label">URL do YouTube / YouTube Music</label>
+      <div class="platform-toggle" id="platformToggle" role="radiogroup" aria-label="Plataforma de origem">
+        <button type="button" class="platform-toggle__btn is-active" data-platform="youtube" aria-pressed="true">YouTube</button>
+        <button type="button" class="platform-toggle__btn" data-platform="soundcloud" aria-pressed="false">SoundCloud</button>
+      </div>
+      <label for="urlInput" class="panel__label" id="urlInputLabel">URL do YouTube / YouTube Music</label>
       <div class="input-row">
         <input
           type="text"

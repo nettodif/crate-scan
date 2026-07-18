@@ -1,10 +1,10 @@
 # CrateScan
 
-Pré-análise de qualidade de áudio para faixas do YouTube / YouTube Music, inspirado no
-carregamento de faixas no rekordbox: baixa o áudio, extrai metadados técnicos (codec,
-bitrate, sample rate) e gera um espectrograma + um "corte espectral estimado" que ajuda a
-identificar faixas transcodificadas ou de baixo bitrate mesmo quando o bitrate declarado
-parece bom.
+Pré-análise de qualidade de áudio para faixas do YouTube, YouTube Music e SoundCloud,
+inspirado no carregamento de faixas no rekordbox: baixa o áudio, extrai metadados técnicos
+(codec, bitrate, sample rate) e gera um espectrograma + um "corte espectral estimado" que
+ajuda a identificar faixas transcodificadas ou de baixo bitrate mesmo quando o bitrate
+declarado parece bom.
 
 ## Como funciona
 
@@ -52,19 +52,23 @@ yt-dlp --version
 Se algum comando não estiver no PATH, ajuste os caminhos completos via variáveis de
 ambiente: `YTDLP_PATH`, `FFMPEG_PATH`, `FFPROBE_PATH`.
 
-### Usando uma conta logada (YouTube Music Premium) para bitrate mais alto
+### Usando uma conta logada (YouTube Music Premium / SoundCloud) para bitrate mais alto
 
-Sem autenticação, o yt-dlp baixa como visitante anônimo e o YouTube só oferece os formatos
-padrão (~128kbps AAC/Opus) — mesmo que a faixa tenha um stream de bitrate maior disponível
-só para contas Premium. Pra desbloquear esses formatos, passe cookies de uma sessão logada,
-por um dos dois jeitos abaixo (o primeiro que estiver configurado vence):
+Sem autenticação, o yt-dlp baixa como visitante anônimo e cada serviço só oferece os
+formatos padrão (~128kbps no YouTube) — mesmo que a faixa tenha um stream de bitrate maior
+disponível só para contas logadas (Premium no YouTube Music, Go+/faixas privadas no
+SoundCloud). Pra desbloquear esses formatos, passe cookies de uma sessão logada, por um dos
+dois jeitos abaixo (o primeiro que estiver configurado vence):
 
 1. **Upload pela UI** (recomendado, funciona em qualquer lugar incluindo Docker/deploy
-   remoto): exporte o cookies.txt de um navegador logado na conta Premium (extensão "Get
-   cookies.txt LOCALLY" ou similar) e envie pelo botão "Enviar cookies.txt (Premium)" no
-   topo da página. O servidor valida o arquivo na hora (roda uma checagem rápida com
-   yt-dlp) e rejeita com mensagem clara se o export estiver expirado ou corrompido, em vez
-   de só falhar depois na hora de analisar uma faixa de verdade.
+   remoto): exporte o cookies.txt de um navegador logado (extensão "Get cookies.txt
+   LOCALLY" ou similar — um único export já carrega os cookies de todos os domínios
+   visitados nessa sessão, então o mesmo arquivo serve tanto pra YouTube quanto pra
+   SoundCloud) e envie pelo botão "Enviar cookies.txt" no topo da página. O toggle
+   YouTube/SoundCloud do painel de análise decide qual serviço o servidor usa pra validar o
+   cookie na hora do upload (roda uma checagem rápida com yt-dlp contra uma URL pública
+   daquele serviço) e rejeita com mensagem clara se o export estiver expirado ou corrompido,
+   em vez de só falhar depois na hora de analisar uma faixa de verdade.
 2. `YTDLP_COOKIES_FILE=/caminho/cookies.txt` — mesma ideia, mas apontando o caminho direto
    via variável de ambiente em vez de subir pela UI.
 
@@ -100,8 +104,8 @@ npm install
 npm start
 ```
 
-Abra `http://localhost:5178` no navegador, cole uma URL do YouTube ou YouTube Music e
-clique em **Analisar**.
+Abra `http://localhost:5178` no navegador, escolha a plataforma (YouTube ou SoundCloud) no
+toggle acima do campo de URL, cole a URL da faixa/playlist e clique em **Analisar**.
 
 > A porta é `5178` por padrão; mude com a variável de ambiente `PORT`.
 
@@ -123,8 +127,8 @@ O `docker-compose.yml` já vem com dois volumes nomeados que persistem entre res
 
 - `spectrograms` — imagens de espectrograma geradas (`/app/public/spectrograms`).
 - `cookies_data` — cookies.txt enviado pela UI (`/app/data/auth`). O upload pelo botão
-  "Enviar cookies.txt (Premium)" funciona exatamente igual ao rodando local — é o jeito
-  recomendado de configurar autenticação em Docker (veja a seção acima).
+  "Enviar cookies.txt" funciona exatamente igual ao rodando local — é o jeito recomendado de
+  configurar autenticação em Docker (veja a seção acima).
 
 Pra mudar a porta exposta no host, edite o mapeamento `ports` em `docker-compose.yml`
 (ex. `"8080:5178"`).
@@ -160,6 +164,10 @@ create-scan/
 
 ## Funcionalidades
 
+- **Seletor de plataforma**: toggle YouTube/SoundCloud no painel de análise — ajusta o
+  rótulo/placeholder do campo de URL e decide contra qual serviço o cookie enviado é
+  validado. A análise em si funciona com qualquer URL suportada pelo yt-dlp
+  independentemente do toggle; ele só ajusta a experiência, não bloqueia URLs.
 - **Streaming de progresso**: `GET /api/analyze/stream?url=...` expõe a análise via
   Server-Sent Events, emitindo estágios (`download_start`, `download_progress`,
   `metadata_start`, `spectrogram_start`, `fft_start`, `done`/`error`) — o frontend consome

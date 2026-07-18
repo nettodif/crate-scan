@@ -37,12 +37,17 @@ function authArgs() {
   return [];
 }
 
-// "Me at the zoo" — the first YouTube video ever uploaded. Always public, no
-// age/region/membership restriction, never disappears — a stable target for a
-// lightweight sanity check. (Using ytsearch here would be a bad idea: it
-// returns whatever's currently trending for that query, which could itself be
-// restricted for a given account and produce a false "invalid cookie" result.)
-const COOKIE_VALIDATION_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+// Stable, always-public targets for a lightweight per-platform sanity check —
+// same reasoning for both: no age/region/membership restriction, never
+// disappears. (Using a search query here would be a bad idea: it returns
+// whatever's currently trending, which could itself be restricted for a given
+// account and produce a false "invalid cookie" result.)
+const COOKIE_VALIDATION_URLS = {
+  // "Me at the zoo" — the first YouTube video ever uploaded.
+  youtube: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+  // SoundCloud's own official account, first upload — same stability rationale.
+  soundcloud: 'https://soundcloud.com/soundcloud/soundcloud-go',
+};
 
 // YouTube rotating/expiring a cookie doesn't make yt-dlp fail — it just warns
 // and silently falls back to an unauthenticated client, so a stale cookie
@@ -58,8 +63,9 @@ function hasInvalidCookieWarning(stdErr) {
  * catches a malformed/expired export at upload time instead of only failing
  * later during a real analysis.
  */
-export async function validateCookiesAsync(cookiesPath) {
-  const args = ['--cookies', cookiesPath, ...JS_RUNTIME_ARGS, '--simulate', '--skip-download', '--dump-json', COOKIE_VALIDATION_URL];
+export async function validateCookiesAsync(cookiesPath, platform = 'youtube') {
+  const validationUrl = COOKIE_VALIDATION_URLS[platform] ?? COOKIE_VALIDATION_URLS.youtube;
+  const args = ['--cookies', cookiesPath, ...JS_RUNTIME_ARGS, '--simulate', '--skip-download', '--dump-json', validationUrl];
   const result = await runAsync(config.ytDlpPath, args);
 
   if (result.exitCode !== 0) {
@@ -67,7 +73,7 @@ export async function validateCookiesAsync(cookiesPath) {
   }
 
   if (hasInvalidCookieWarning(result.stdErr)) {
-    throw new Error('O YouTube rejeitou esse cookie (provavelmente expirado ou rotacionado). Exporte um cookies.txt novo do navegador.');
+    throw new Error('O serviço rejeitou esse cookie (provavelmente expirado ou rotacionado). Exporte um cookies.txt novo do navegador.');
   }
 }
 
@@ -180,7 +186,7 @@ export async function fetchPlaylistEntriesAsync(url) {
     .map((entry) => {
       const id = entry.id ?? 'unknown';
       const rawUrl = entry.webpage_url ?? entry.url ?? '';
-      const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : `https://www.youtube.com/watch?v=${id}`;
+      const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : url;
       return { id, url: resolvedUrl, title: entry.title ?? 'Título desconhecido' };
     });
 

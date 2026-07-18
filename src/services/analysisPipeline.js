@@ -57,7 +57,7 @@ export async function runAnalysis(url, { onProgress } = {}) {
 
     if (download.cookieInvalid) {
       notes.push(
-        'Atenção: o cookie configurado não é mais válido (expirado ou rotacionado pelo YouTube) — ' +
+        'Atenção: o cookie configurado não é mais válido (expirado ou rotacionado) — ' +
         'essa análise rodou sem autenticação, como visitante anônimo. Exporte um cookies.txt novo e reenvie.'
       );
     }
@@ -79,7 +79,7 @@ export async function runAnalysis(url, { onProgress } = {}) {
       notes.push('O container não expôs um bitrate declarado explícito; use o corte espectral como referência principal.');
     }
 
-    // Cross-check: o bitrate medido no arquivo baixado bate com o que o YouTube informou
+    // Cross-check: o bitrate medido no arquivo baixado bate com o que o yt-dlp informou
     // pra esse formato nativo? Se o medido vier bem maior, o arquivo foi reencodado/remuxado
     // após o download original (ex.: Opus ~160kbps convertido pra AAC em qualidade alta) —
     // isso infla o número sem ganho real de qualidade, o mesmo problema que o corte espectral
@@ -90,7 +90,7 @@ export async function runAnalysis(url, { onProgress } = {}) {
       if (measuredKbps > source.abrKbps * 1.15) {
         notes.push(
           `Atenção: bitrate medido no arquivo (${measuredKbps.toFixed(0)}kbps) é maior que o bitrate da ` +
-          `fonte nativa informada pelo YouTube (${source.abrKbps.toFixed(0)}kbps, codec ${source.acodec ?? 'desconhecido'}). ` +
+          `fonte nativa informada pelo yt-dlp (${source.abrKbps.toFixed(0)}kbps, codec ${source.acodec ?? 'desconhecido'}). ` +
           'Isso sugere que o arquivo foi reencodado/convertido depois do download original, inflando o ' +
           'bitrate declarado sem ganho real de qualidade.'
         );
