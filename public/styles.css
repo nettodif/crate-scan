@@ -202,6 +202,16 @@ body {
   min-height: 16px;
 }
 
+.panel__hint--muted {
+  color: var(--text-muted);
+}
+
+.panel__hint--info {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
 /* ---------- Auth (cookies upload) ---------- */
 
 .panel--auth {

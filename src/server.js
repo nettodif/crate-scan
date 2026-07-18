@@ -23,7 +23,7 @@ function validateUrl(url) {
 app.post('/api/analyze', async (req, res) => {
   const url = req.body?.url;
   if (!validateUrl(url)) {
-    res.status(400).json({ error: 'Informe uma URL do YouTube ou YouTube Music.' });
+    res.status(400).json({ error: 'Informe uma URL do YouTube, YouTube Music ou SoundCloud.' });
     return;
   }
 
@@ -42,7 +42,7 @@ app.post('/api/analyze', async (req, res) => {
 app.get('/api/playlist/entries', async (req, res) => {
   const url = req.query?.url;
   if (!validateUrl(url)) {
-    res.status(400).json({ error: 'Informe uma URL do YouTube ou YouTube Music.' });
+    res.status(400).json({ error: 'Informe uma URL do YouTube, YouTube Music ou SoundCloud.' });
     return;
   }
 
@@ -61,7 +61,7 @@ app.get('/api/playlist/entries', async (req, res) => {
 app.get('/api/analyze/stream', async (req, res) => {
   const url = req.query?.url;
   if (!validateUrl(url)) {
-    res.status(400).json({ error: 'Informe uma URL do YouTube ou YouTube Music.' });
+    res.status(400).json({ error: 'Informe uma URL do YouTube, YouTube Music ou SoundCloud.' });
     return;
   }
 
@@ -95,7 +95,7 @@ app.get('/api/analyze/stream', async (req, res) => {
 app.get('/api/analyze-playlist/stream', async (req, res) => {
   const url = req.query?.url;
   if (!validateUrl(url)) {
-    res.status(400).json({ error: 'Informe uma URL do YouTube ou YouTube Music.' });
+    res.status(400).json({ error: 'Informe uma URL do YouTube, YouTube Music ou SoundCloud.' });
     return;
   }
 
@@ -203,10 +203,14 @@ app.get('/api/download/:id', (req, res) => {
   });
 });
 
-// Lets the user upload a cookies.txt (exported from a browser logged into YouTube
-// Music Premium) so yt-dlp can act as that session and unlock higher-bitrate
-// formats. Single file, no per-user isolation — safe because this app is meant
-// to run as one container per user (see README), not a shared multi-tenant deploy.
+// Lets the user upload a cookies.txt (exported from a browser logged into
+// YouTube Music Premium and/or SoundCloud) so yt-dlp can act as that session —
+// unlocks higher-bitrate YouTube Music formats and/or private/paid SoundCloud
+// tracks when available. Single file, no per-user isolation — safe because this
+// app is meant to run as one container per user (see README), not a shared
+// multi-tenant deploy. Sanity-checked at upload time against both services
+// (see validateCookiesAsync) so the caller doesn't need to say which one the
+// cookie is for.
 app.post('/api/cookies', express.text({ type: '*/*', limit: '1mb' }), async (req, res) => {
   const content = req.body;
   if (typeof content !== 'string' || content.trim().length === 0) {

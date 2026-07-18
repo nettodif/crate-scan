@@ -37,12 +37,17 @@ function authArgs() {
   return [];
 }
 
-// "Me at the zoo" — the first YouTube video ever uploaded. Always public, no
-// age/region/membership restriction, never disappears — a stable target for a
-// lightweight sanity check. (Using ytsearch here would be a bad idea: it
-// returns whatever's currently trending for that query, which could itself be
-// restricted for a given account and produce a false "invalid cookie" result.)
-const COOKIE_VALIDATION_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+// Stable, always-public targets for a lightweight per-platform sanity check —
+// same reasoning for both: no age/region/membership restriction, never
+// disappears. (Using a search query here would be a bad idea: it returns
+// whatever's currently trending, which could itself be restricted for a given
+// account and produce a false "invalid cookie" result.)
+const COOKIE_VALIDATION_URLS = {
+  // "Me at the zoo" — the first YouTube video ever uploaded.
+  youtube: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+  // SoundCloud's own official account, first upload — same stability rationale.
+  soundcloud: 'https://soundcloud.com/soundcloud/soundcloud-go',
+};
 
 // YouTube rotating/expiring a cookie doesn't make yt-dlp fail — it just warns
 // and silently falls back to an unauthenticated client, so a stale cookie
@@ -53,13 +58,9 @@ function hasInvalidCookieWarning(stdErr) {
   return /cookies?.*no longer valid/i.test(stdErr);
 }
 
-/**
- * Sanity-checks a cookies.txt by running a lightweight yt-dlp call against it —
- * catches a malformed/expired export at upload time instead of only failing
- * later during a real analysis.
- */
-export async function validateCookiesAsync(cookiesPath) {
-  const args = ['--cookies', cookiesPath, ...JS_RUNTIME_ARGS, '--simulate', '--skip-download', '--dump-json', COOKIE_VALIDATION_URL];
+async function validateCookiesAgainst(cookiesPath, platform) {
+  const validationUrl = COOKIE_VALIDATION_URLS[platform];
+  const args = ['--cookies', cookiesPath, ...JS_RUNTIME_ARGS, '--simulate', '--skip-download', '--dump-json', validationUrl];
   const result = await runAsync(config.ytDlpPath, args);
 
   if (result.exitCode !== 0) {
@@ -67,8 +68,27 @@ export async function validateCookiesAsync(cookiesPath) {
   }
 
   if (hasInvalidCookieWarning(result.stdErr)) {
-    throw new Error('O YouTube rejeitou esse cookie (provavelmente expirado ou rotacionado). Exporte um cookies.txt novo do navegador.');
+    throw new Error('O serviço rejeitou esse cookie (provavelmente expirado ou rotacionado). Exporte um cookies.txt novo do navegador.');
   }
+}
+
+/**
+ * Sanity-checks a cookies.txt by running a lightweight yt-dlp call against it —
+ * catches a malformed/expired export at upload time instead of only failing
+ * later during a real analysis. A single cookies.txt export can carry cookies
+ * for both YouTube and SoundCloud at once, so this tries both services and
+ * only fails if neither validates — it doesn't require the caller to know
+ * which service the cookie is actually for.
+ */
+export async function validateCookiesAsync(cookiesPath) {
+  const platforms = Object.keys(COOKIE_VALIDATION_URLS);
+  const results = await Promise.allSettled(platforms.map((platform) => validateCookiesAgainst(cookiesPath, platform)));
+
+  const validatedFor = platforms.filter((_, i) => results[i].status === 'fulfilled');
+  if (validatedFor.length > 0) return validatedFor;
+
+  const detail = results.map((r, i) => `${platforms[i]}: ${r.reason.message}`).join(' | ');
+  throw new Error(`yt-dlp não conseguiu usar esse cookies.txt pra nenhum serviço suportado. Detalhe: ${detail}`);
 }
 
 /**
@@ -180,7 +200,7 @@ export async function fetchPlaylistEntriesAsync(url) {
     .map((entry) => {
       const id = entry.id ?? 'unknown';
       const rawUrl = entry.webpage_url ?? entry.url ?? '';
-      const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : `https://www.youtube.com/watch?v=${id}`;
+      const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : url;
       return { id, url: resolvedUrl, title: entry.title ?? 'Título desconhecido' };
     });
 

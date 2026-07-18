@@ -38,6 +38,13 @@ const STAGE_LABELS = {
   cached: 'Encontrado em cache',
 };
 
+function resetResults() {
+  resultsList.innerHTML = '';
+  resultsPanel.hidden = true;
+  playlistList.innerHTML = '';
+  playlistPanel.hidden = true;
+}
+
 function setStatus(state, label) {
   statusLed.dataset.state = state;
   statusLabel.textContent = label;
@@ -249,13 +256,11 @@ async function analyze() {
   errorHint.textContent = '';
 
   if (!url) {
-    errorHint.textContent = 'Cole uma URL do YouTube ou YouTube Music antes de analisar.';
+    errorHint.textContent = 'Cole uma URL do YouTube, YouTube Music ou SoundCloud antes de analisar.';
     return;
   }
 
-  resultsList.innerHTML = '';
-  resultsPanel.hidden = true;
-  playlistPanel.hidden = true;
+  resetResults();
 
   setBusy(true, 'Buscando faixas…');
 
@@ -288,9 +293,7 @@ async function analyzeSelected() {
   }
 
   const entries = checked.map((c) => ({ url: c.dataset.url, title: c.dataset.title }));
-  playlistPanel.hidden = true;
-  resultsList.innerHTML = '';
-  resultsPanel.hidden = true;
+  resetResults();
   await analyzeTracks(entries);
 }
 
