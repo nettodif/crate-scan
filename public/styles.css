@@ -490,6 +490,67 @@ body {
   border-radius: 4px;
 }
 
+/* ---------- Structure / hot cues ---------- */
+
+.structure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel-raised);
+}
+
+.structure__style {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+}
+
+.structure__style-badge {
+  font-size: 13px;
+  color: var(--phosphor);
+}
+
+.structure__style-confidence {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.structure__timeline {
+  position: relative;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.structure__timeline-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  border-right: 1px solid var(--panel-raised);
+}
+
+.structure__timeline-segment[data-type="intro"] { background: var(--text-muted); opacity: 0.4; }
+.structure__timeline-segment[data-type="drop"] { background: var(--phosphor); }
+.structure__timeline-segment[data-type="breakdown"] { background: var(--amber); }
+.structure__timeline-segment[data-type="outro"] { background: var(--text-muted); opacity: 0.4; }
+
+.structure__cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
 /* ---------- Scope (spectrogram bezel) ---------- */
 
 .scope__bezel {

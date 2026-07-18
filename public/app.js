@@ -35,7 +35,20 @@ const STAGE_LABELS = {
   metadata_start: 'Lendo metadados',
   spectrogram_start: 'Gerando espectrograma',
   fft_start: 'Analisando espectro',
+  structure_start: 'Detectando estrutura da faixa',
   cached: 'Encontrado em cache',
+};
+
+const MIXING_STYLE_LABELS = {
+  classic: 'Mixagem clássica (blend longo)',
+  cut: 'Mixagem de corte (cut)',
+  hybrid: 'Mixagem híbrida',
+};
+
+const CONFIDENCE_LABELS = {
+  high: 'confiança alta',
+  medium: 'confiança média',
+  low: 'confiança baixa',
 };
 
 function resetResults() {
@@ -158,6 +171,7 @@ function renderTrackCard(data) {
 
   card.querySelector('.js-spectrogram').src = `${data.spectrogramUrl}?t=${Date.now()}`;
   renderSpectrogramAxis(card, data);
+  renderStructureSection(card, data);
 
   const downloadLink = card.querySelector('.js-download-link');
   if (data.downloadUrl) {
@@ -208,6 +222,59 @@ function renderSpectrogramAxis(card, data) {
     cutoffLine.style.display = 'block';
     cutoffLine.dataset.level = data.overallVerdictLevel || 'unknown';
     cutoffLine.querySelector('.js-cutoff-label').textContent = `corte: ${formatHz(cutoffHz)}`;
+  }
+}
+
+const SECTION_TYPE_LABELS = {
+  intro: 'Intro',
+  drop: 'Drop',
+  breakdown: 'Breakdown',
+  outro: 'Outro',
+};
+
+/**
+ * Structure/hot-cue suggestions are heuristic (energy-envelope based, see
+ * structureAnalyzer.js) — older cached results may not have a `structure` field.
+ */
+function renderStructureSection(card, data) {
+  const box = card.querySelector('.js-structure');
+  const structure = data.structure;
+  if (!structure) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+
+  const styleBadge = card.querySelector('.js-structure-style-badge');
+  styleBadge.textContent = MIXING_STYLE_LABELS[structure.mixingStyle] || structure.mixingStyle;
+
+  const styleConfidence = card.querySelector('.js-structure-style-confidence');
+  styleConfidence.textContent = CONFIDENCE_LABELS[structure.mixingStyleConfidence] || '';
+
+  const durationSec = data.metadata.durationSec;
+  const timeline = card.querySelector('.js-structure-timeline');
+  if (durationSec > 0) {
+    for (const section of structure.sections) {
+      const startPct = (section.startSec / durationSec) * 100;
+      const endSec = section.endSec ?? section.startSec;
+      const widthPct = Math.max(0, ((endSec - section.startSec) / durationSec) * 100);
+
+      const marker = document.createElement('div');
+      marker.className = 'structure__timeline-segment';
+      marker.dataset.type = section.type;
+      marker.style.left = `${startPct}%`;
+      marker.style.width = `${widthPct}%`;
+      marker.title = `${SECTION_TYPE_LABELS[section.type] || section.type} — ${formatDuration(section.startSec)}`;
+      timeline.appendChild(marker);
+    }
+  }
+
+  const cuesBox = card.querySelector('.js-structure-cues');
+  for (const cue of structure.hotCues) {
+    const el = document.createElement('div');
+    el.className = 'structure__cue';
+    el.textContent = `${formatDuration(cue.timeSec)} — ${cue.label}`;
+    cuesBox.appendChild(el);
   }
 }
 

@@ -2,6 +2,7 @@ import path from 'node:path';
 import * as ytDlp from './ytDlpService.js';
 import * as ffmpeg from './ffmpegService.js';
 import * as spectrumAnalyzer from './spectrumAnalyzer.js';
+import * as structureAnalyzer from './structureAnalyzer.js';
 import * as analysisCache from './analysisCache.js';
 import * as downloadStore from './downloadStore.js';
 
@@ -52,6 +53,10 @@ export async function runAnalysis(url, { onProgress } = {}) {
     const pcm = await ffmpeg.decodeToMonoPcmAsync(download.filePath, metadata.sampleRateHz);
     const spectrum = spectrumAnalyzer.analyze(pcm, metadata.sampleRateHz);
     emit('fft_done');
+
+    emit('structure_start');
+    const structure = structureAnalyzer.analyze(pcm, metadata.sampleRateHz, metadata.durationSec);
+    emit('structure_done');
 
     const notes = [];
 
@@ -108,6 +113,7 @@ export async function runAnalysis(url, { onProgress } = {}) {
       sourceUrl: url,
       metadata,
       spectrum,
+      structure,
       spectrogramUrl,
       overallVerdict: spectrum.verdict,
       overallVerdictLevel: spectrum.verdictLevel,

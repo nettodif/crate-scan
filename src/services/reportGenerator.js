@@ -12,6 +12,8 @@ const CSV_COLUMNS = [
   ['cutoffHz', 'Corte espectral (Hz)'],
   ['overallVerdictLevel', 'Nível'],
   ['overallVerdict', 'Veredito'],
+  ['mixingStyle', 'Estilo de mixagem sugerido'],
+  ['hotCueCount', 'Nº de hot cues sugeridos'],
 ];
 
 function flatten(session) {
@@ -27,6 +29,8 @@ function flatten(session) {
     cutoffHz: session.spectrum?.cutoffHz,
     overallVerdictLevel: session.overallVerdictLevel,
     overallVerdict: session.overallVerdict,
+    mixingStyle: session.structure?.mixingStyle,
+    hotCueCount: session.structure?.hotCues?.length,
   };
 }
 
@@ -85,6 +89,11 @@ export function toPdf(sessions) {
 
       doc.fontSize(12).text(`Veredito (${flat.overallVerdictLevel ?? 'indeterminado'}):`, { continued: false });
       doc.fontSize(11).text(flat.overallVerdict ?? '—');
+
+      if (flat.mixingStyle) {
+        doc.moveDown(0.3);
+        doc.fontSize(10).text(`Estilo de mixagem sugerido: ${flat.mixingStyle} (${flat.hotCueCount ?? 0} hot cues sugeridos)`);
+      }
 
       if (session.notes?.length) {
         doc.moveDown();
