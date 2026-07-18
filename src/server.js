@@ -208,8 +208,9 @@ app.get('/api/download/:id', (req, res) => {
 // unlocks higher-bitrate YouTube Music formats and/or private/paid SoundCloud
 // tracks when available. Single file, no per-user isolation — safe because this
 // app is meant to run as one container per user (see README), not a shared
-// multi-tenant deploy. `platform` (query string) picks which service's cookie
-// gets sanity-checked at upload time — it doesn't gate which cookies are stored.
+// multi-tenant deploy. Sanity-checked at upload time against both services
+// (see validateCookiesAsync) so the caller doesn't need to say which one the
+// cookie is for.
 app.post('/api/cookies', express.text({ type: '*/*', limit: '1mb' }), async (req, res) => {
   const content = req.body;
   if (typeof content !== 'string' || content.trim().length === 0) {
@@ -217,12 +218,10 @@ app.post('/api/cookies', express.text({ type: '*/*', limit: '1mb' }), async (req
     return;
   }
 
-  const platform = req.query?.platform === 'soundcloud' ? 'soundcloud' : 'youtube';
-
   await cookieStore.save(content);
 
   try {
-    await ytDlp.validateCookiesAsync(cookieStore.getPath(), platform);
+    await ytDlp.validateCookiesAsync(cookieStore.getPath());
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Cookie enviado não passou na validação', err);

@@ -45,22 +45,21 @@
     </section>
 
     <section class="panel panel--input">
-      <div class="platform-toggle" id="platformToggle" role="radiogroup" aria-label="Plataforma de origem">
-        <button type="button" class="platform-toggle__btn is-active" data-platform="youtube" aria-pressed="true">YouTube</button>
-        <button type="button" class="platform-toggle__btn" data-platform="soundcloud" aria-pressed="false">SoundCloud</button>
-      </div>
-      <label for="urlInput" class="panel__label" id="urlInputLabel">URL do YouTube / YouTube Music</label>
+      <label for="urlInput" class="panel__label">URL da faixa ou playlist</label>
       <div class="input-row">
         <input
           type="text"
           id="urlInput"
-          placeholder="https://music.youtube.com/watch?v=..."
+          placeholder="https://music.youtube.com/watch?v=... ou https://soundcloud.com/artista/faixa"
           autocomplete="off"
         />
         <button id="analyzeBtn" class="btn btn--primary">
           <span id="analyzeBtnLabel">Analisar</span>
         </button>
       </div>
+      <p class="panel__hint panel__hint--muted panel__hint--info">
+        YouTube · YouTube Music · SoundCloud — faixa única ou playlist
+      </p>
       <p class="panel__hint" id="errorHint"></p>
     </section>
 

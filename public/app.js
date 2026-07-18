@@ -1,6 +1,4 @@
 const urlInput = document.getElementById('urlInput');
-const urlInputLabel = document.getElementById('urlInputLabel');
-const platformToggle = document.getElementById('platformToggle');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const analyzeBtnLabel = document.getElementById('analyzeBtnLabel');
 const errorHint = document.getElementById('errorHint');
@@ -40,37 +38,11 @@ const STAGE_LABELS = {
   cached: 'Encontrado em cache',
 };
 
-const PLATFORM_COPY = {
-  youtube: {
-    label: 'URL do YouTube / YouTube Music',
-    placeholder: 'https://music.youtube.com/watch?v=...',
-    emptyUrlHint: 'Cole uma URL do YouTube ou YouTube Music antes de analisar.',
-  },
-  soundcloud: {
-    label: 'URL do SoundCloud',
-    placeholder: 'https://soundcloud.com/artista/faixa',
-    emptyUrlHint: 'Cole uma URL do SoundCloud antes de analisar.',
-  },
-};
-
-const PLATFORM_STORAGE_KEY = 'cratescan:selectedPlatform';
-let selectedPlatform = localStorage.getItem(PLATFORM_STORAGE_KEY) === 'soundcloud' ? 'soundcloud' : 'youtube';
-
-function applyPlatformCopy() {
-  const copy = PLATFORM_COPY[selectedPlatform];
-  urlInputLabel.textContent = copy.label;
-  urlInput.placeholder = copy.placeholder;
-  platformToggle.querySelectorAll('.platform-toggle__btn').forEach((btn) => {
-    const isActive = btn.dataset.platform === selectedPlatform;
-    btn.classList.toggle('is-active', isActive);
-    btn.setAttribute('aria-pressed', String(isActive));
-  });
-}
-
-function setPlatform(platform) {
-  selectedPlatform = platform === 'soundcloud' ? 'soundcloud' : 'youtube';
-  localStorage.setItem(PLATFORM_STORAGE_KEY, selectedPlatform);
-  applyPlatformCopy();
+function resetResults() {
+  resultsList.innerHTML = '';
+  resultsPanel.hidden = true;
+  playlistList.innerHTML = '';
+  playlistPanel.hidden = true;
 }
 
 function setStatus(state, label) {
@@ -284,13 +256,11 @@ async function analyze() {
   errorHint.textContent = '';
 
   if (!url) {
-    errorHint.textContent = PLATFORM_COPY[selectedPlatform].emptyUrlHint;
+    errorHint.textContent = 'Cole uma URL do YouTube, YouTube Music ou SoundCloud antes de analisar.';
     return;
   }
 
-  resultsList.innerHTML = '';
-  resultsPanel.hidden = true;
-  playlistPanel.hidden = true;
+  resetResults();
 
   setBusy(true, 'Buscando faixas…');
 
@@ -323,9 +293,7 @@ async function analyzeSelected() {
   }
 
   const entries = checked.map((c) => ({ url: c.dataset.url, title: c.dataset.title }));
-  playlistPanel.hidden = true;
-  resultsList.innerHTML = '';
-  resultsPanel.hidden = true;
+  resetResults();
   await analyzeTracks(entries);
 }
 
@@ -371,7 +339,7 @@ async function uploadCookiesFile(file) {
   cookiesStatus.textContent = 'Enviando cookies…';
 
   try {
-    const res = await fetch(`/api/cookies?platform=${selectedPlatform}`, {
+    const res = await fetch('/api/cookies', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: content,
@@ -425,11 +393,6 @@ async function clearAllCache() {
   }
 }
 
-platformToggle.addEventListener('click', (e) => {
-  const btn = e.target.closest('.platform-toggle__btn');
-  if (btn) setPlatform(btn.dataset.platform);
-});
-
 analyzeBtn.addEventListener('click', analyze);
 urlInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') analyze();
@@ -451,5 +414,4 @@ cookiesFileInput.addEventListener('change', () => {
 cookiesClearBtn.addEventListener('click', clearCookies);
 clearCacheBtn.addEventListener('click', clearAllCache);
 
-applyPlatformCopy();
 refreshCookiesStatus();

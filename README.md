@@ -64,11 +64,13 @@ dois jeitos abaixo (o primeiro que estiver configurado vence):
    remoto): exporte o cookies.txt de um navegador logado (extensão "Get cookies.txt
    LOCALLY" ou similar — um único export já carrega os cookies de todos os domínios
    visitados nessa sessão, então o mesmo arquivo serve tanto pra YouTube quanto pra
-   SoundCloud) e envie pelo botão "Enviar cookies.txt" no topo da página. O toggle
-   YouTube/SoundCloud do painel de análise decide qual serviço o servidor usa pra validar o
-   cookie na hora do upload (roda uma checagem rápida com yt-dlp contra uma URL pública
-   daquele serviço) e rejeita com mensagem clara se o export estiver expirado ou corrompido,
-   em vez de só falhar depois na hora de analisar uma faixa de verdade.
+   SoundCloud, sem precisar de dois uploads separados) e envie pelo botão "Enviar
+   cookies.txt" no topo da página. Na hora do upload, o servidor roda uma checagem rápida
+   com yt-dlp contra os dois serviços em paralelo (uma URL pública de cada) e aceita o
+   cookie se pelo menos um validar — cobre tanto o caso de um cookie só de YouTube/YouTube
+   Music quanto um export combinado com SoundCloud junto, e rejeita com mensagem clara só se
+   o export estiver expirado/corrompido pros dois, em vez de só falhar depois na hora de
+   analisar uma faixa de verdade.
 2. `YTDLP_COOKIES_FILE=/caminho/cookies.txt` — mesma ideia, mas apontando o caminho direto
    via variável de ambiente em vez de subir pela UI.
 
@@ -104,8 +106,9 @@ npm install
 npm start
 ```
 
-Abra `http://localhost:5178` no navegador, escolha a plataforma (YouTube ou SoundCloud) no
-toggle acima do campo de URL, cole a URL da faixa/playlist e clique em **Analisar**.
+Abra `http://localhost:5178` no navegador, cole a URL de uma faixa ou playlist do YouTube,
+YouTube Music ou SoundCloud e clique em **Analisar** — a plataforma é detectada
+automaticamente pela URL, sem precisar selecionar nada antes.
 
 > A porta é `5178` por padrão; mude com a variável de ambiente `PORT`.
 
@@ -164,10 +167,9 @@ create-scan/
 
 ## Funcionalidades
 
-- **Seletor de plataforma**: toggle YouTube/SoundCloud no painel de análise — ajusta o
-  rótulo/placeholder do campo de URL e decide contra qual serviço o cookie enviado é
-  validado. A análise em si funciona com qualquer URL suportada pelo yt-dlp
-  independentemente do toggle; ele só ajusta a experiência, não bloqueia URLs.
+- **Detecção automática de plataforma**: não há seletor de plataforma na UI — cole a URL
+  (YouTube, YouTube Music ou SoundCloud, faixa isolada ou playlist/set) e o yt-dlp detecta o
+  serviço sozinho pelo próprio link.
 - **Streaming de progresso**: `GET /api/analyze/stream?url=...` expõe a análise via
   Server-Sent Events, emitindo estágios (`download_start`, `download_progress`,
   `metadata_start`, `spectrogram_start`, `fft_start`, `done`/`error`) — o frontend consome

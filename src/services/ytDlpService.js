@@ -58,13 +58,8 @@ function hasInvalidCookieWarning(stdErr) {
   return /cookies?.*no longer valid/i.test(stdErr);
 }
 
-/**
- * Sanity-checks a cookies.txt by running a lightweight yt-dlp call against it —
- * catches a malformed/expired export at upload time instead of only failing
- * later during a real analysis.
- */
-export async function validateCookiesAsync(cookiesPath, platform = 'youtube') {
-  const validationUrl = COOKIE_VALIDATION_URLS[platform] ?? COOKIE_VALIDATION_URLS.youtube;
+async function validateCookiesAgainst(cookiesPath, platform) {
+  const validationUrl = COOKIE_VALIDATION_URLS[platform];
   const args = ['--cookies', cookiesPath, ...JS_RUNTIME_ARGS, '--simulate', '--skip-download', '--dump-json', validationUrl];
   const result = await runAsync(config.ytDlpPath, args);
 
@@ -75,6 +70,25 @@ export async function validateCookiesAsync(cookiesPath, platform = 'youtube') {
   if (hasInvalidCookieWarning(result.stdErr)) {
     throw new Error('O serviço rejeitou esse cookie (provavelmente expirado ou rotacionado). Exporte um cookies.txt novo do navegador.');
   }
+}
+
+/**
+ * Sanity-checks a cookies.txt by running a lightweight yt-dlp call against it —
+ * catches a malformed/expired export at upload time instead of only failing
+ * later during a real analysis. A single cookies.txt export can carry cookies
+ * for both YouTube and SoundCloud at once, so this tries both services and
+ * only fails if neither validates — it doesn't require the caller to know
+ * which service the cookie is actually for.
+ */
+export async function validateCookiesAsync(cookiesPath) {
+  const platforms = Object.keys(COOKIE_VALIDATION_URLS);
+  const results = await Promise.allSettled(platforms.map((platform) => validateCookiesAgainst(cookiesPath, platform)));
+
+  const validatedFor = platforms.filter((_, i) => results[i].status === 'fulfilled');
+  if (validatedFor.length > 0) return validatedFor;
+
+  const detail = results.map((r, i) => `${platforms[i]}: ${r.reason.message}`).join(' | ');
+  throw new Error(`yt-dlp não conseguiu usar esse cookies.txt pra nenhum serviço suportado. Detalhe: ${detail}`);
 }
 
 /**
