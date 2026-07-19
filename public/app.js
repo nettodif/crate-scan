@@ -271,12 +271,22 @@ function renderStructureLegend(card, data) {
   }
 
   const cuesBox = card.querySelector('.js-structure-cues');
-  for (const cue of structure.hotCues) {
+  structure.hotCues.forEach((cue, i) => {
     const el = document.createElement('div');
     el.className = 'structure__cue';
-    el.textContent = `${formatDuration(cue.timeSec)} — ${cue.label}`;
+
+    const badge = document.createElement('span');
+    badge.className = 'structure__cue-badge';
+    badge.dataset.cueIndex = i % 5;
+    badge.textContent = String.fromCharCode(65 + i);
+
+    const text = document.createElement('span');
+    text.textContent = `${formatDuration(cue.timeSec)} — ${cue.label}`;
+
+    el.appendChild(badge);
+    el.appendChild(text);
     cuesBox.appendChild(el);
-  }
+  });
 }
 
 /**
