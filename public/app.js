@@ -171,7 +171,8 @@ function renderTrackCard(data) {
 
   card.querySelector('.js-spectrogram').src = `${data.spectrogramUrl}?t=${Date.now()}`;
   renderSpectrogramAxis(card, data);
-  renderStructureSection(card, data);
+  renderStructureOverlay(card, data);
+  renderStructureLegend(card, data);
 
   const downloadLink = card.querySelector('.js-download-link');
   if (data.downloadUrl) {
@@ -236,7 +237,7 @@ const SECTION_TYPE_LABELS = {
  * Structure/hot-cue suggestions are heuristic (energy-envelope based, see
  * structureAnalyzer.js) — older cached results may not have a `structure` field.
  */
-function renderStructureSection(card, data) {
+function renderStructureLegend(card, data) {
   const box = card.querySelector('.js-structure');
   const structure = data.structure;
   if (!structure) {
@@ -251,24 +252,6 @@ function renderStructureSection(card, data) {
   const styleConfidence = card.querySelector('.js-structure-style-confidence');
   styleConfidence.textContent = CONFIDENCE_LABELS[structure.mixingStyleConfidence] || '';
 
-  const durationSec = data.metadata.durationSec;
-  const timeline = card.querySelector('.js-structure-timeline');
-  if (durationSec > 0) {
-    for (const section of structure.sections) {
-      const startPct = (section.startSec / durationSec) * 100;
-      const endSec = section.endSec ?? section.startSec;
-      const widthPct = Math.max(0, ((endSec - section.startSec) / durationSec) * 100);
-
-      const marker = document.createElement('div');
-      marker.className = 'structure__timeline-segment';
-      marker.dataset.type = section.type;
-      marker.style.left = `${startPct}%`;
-      marker.style.width = `${widthPct}%`;
-      marker.title = `${SECTION_TYPE_LABELS[section.type] || section.type} — ${formatDuration(section.startSec)}`;
-      timeline.appendChild(marker);
-    }
-  }
-
   const cuesBox = card.querySelector('.js-structure-cues');
   for (const cue of structure.hotCues) {
     const el = document.createElement('div');
@@ -276,6 +259,53 @@ function renderStructureSection(card, data) {
     el.textContent = `${formatDuration(cue.timeSec)} — ${cue.label}`;
     cuesBox.appendChild(el);
   }
+}
+
+/**
+ * Overlays the color-coded structure blocks and hot-cue flags directly on the
+ * scope canvas, reusing the same (timeSec/durationSec)*100% math as the
+ * spectrogram's own axis overlay so both line up exactly.
+ */
+function renderStructureOverlay(card, data) {
+  const structure = data.structure;
+  const durationSec = data.metadata.durationSec;
+  if (!structure || !(durationSec > 0)) return;
+
+  const strip = card.querySelector('.js-structure-strip');
+  for (const section of structure.sections) {
+    const startPct = (section.startSec / durationSec) * 100;
+    const endSec = section.endSec ?? section.startSec;
+    const widthPct = Math.max(0, ((endSec - section.startSec) / durationSec) * 100);
+
+    const segment = document.createElement('div');
+    segment.className = 'scope__structure-segment';
+    segment.dataset.type = section.type;
+    segment.style.left = `${startPct}%`;
+    segment.style.width = `${widthPct}%`;
+    segment.title = `${SECTION_TYPE_LABELS[section.type] || section.type} — ${formatDuration(section.startSec)}`;
+    strip.appendChild(segment);
+  }
+
+  const cueMarkers = card.querySelector('.js-cue-markers');
+  const cueFlags = card.querySelector('.js-cue-flags');
+  structure.hotCues.forEach((cue, i) => {
+    const leftPct = (cue.timeSec / durationSec) * 100;
+    const colorIndex = i % 5;
+
+    const line = document.createElement('div');
+    line.className = 'scope__cue-line';
+    line.dataset.cueIndex = colorIndex;
+    line.style.left = `${leftPct}%`;
+    cueMarkers.appendChild(line);
+
+    const flag = document.createElement('div');
+    flag.className = 'scope__cue-flag';
+    flag.dataset.cueIndex = colorIndex;
+    flag.style.left = `${leftPct}%`;
+    flag.textContent = String.fromCharCode(65 + i);
+    flag.title = `${formatDuration(cue.timeSec)} — ${cue.label}`;
+    cueFlags.appendChild(flag);
+  });
 }
 
 function renderErrorCard(title, message) {
