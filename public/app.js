@@ -35,7 +35,20 @@ const STAGE_LABELS = {
   metadata_start: 'Lendo metadados',
   spectrogram_start: 'Gerando espectrograma',
   fft_start: 'Analisando espectro',
+  structure_start: 'Detectando estrutura da faixa',
   cached: 'Encontrado em cache',
+};
+
+const MIXING_STYLE_LABELS = {
+  classic: 'Mixagem clássica (blend longo)',
+  cut: 'Mixagem de corte (cut)',
+  hybrid: 'Mixagem híbrida',
+};
+
+const CONFIDENCE_LABELS = {
+  high: 'confiança alta',
+  medium: 'confiança média',
+  low: 'confiança baixa',
 };
 
 function resetResults() {
@@ -158,6 +171,8 @@ function renderTrackCard(data) {
 
   card.querySelector('.js-spectrogram').src = `${data.spectrogramUrl}?t=${Date.now()}`;
   renderSpectrogramAxis(card, data);
+  renderStructureOverlay(card, data);
+  renderStructureLegend(card, data);
 
   const downloadLink = card.querySelector('.js-download-link');
   if (data.downloadUrl) {
@@ -209,6 +224,116 @@ function renderSpectrogramAxis(card, data) {
     cutoffLine.dataset.level = data.overallVerdictLevel || 'unknown';
     cutoffLine.querySelector('.js-cutoff-label').textContent = `corte: ${formatHz(cutoffHz)}`;
   }
+}
+
+const SECTION_TYPE_LABELS = {
+  intro: 'Intro',
+  drop: 'Drop',
+  breakdown: 'Breakdown',
+  outro: 'Outro',
+};
+
+/**
+ * Structure/hot-cue suggestions are heuristic (energy-envelope based, see
+ * structureAnalyzer.js) — older cached results may not have a `structure` field.
+ */
+function renderStructureLegend(card, data) {
+  const box = card.querySelector('.js-structure');
+  const structure = data.structure;
+  if (!structure) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+
+  const styleBadge = card.querySelector('.js-structure-style-badge');
+  styleBadge.textContent = MIXING_STYLE_LABELS[structure.mixingStyle] || structure.mixingStyle;
+
+  const styleConfidence = card.querySelector('.js-structure-style-confidence');
+  styleConfidence.textContent = CONFIDENCE_LABELS[structure.mixingStyleConfidence] || '';
+
+  const sectionsBox = card.querySelector('.js-structure-sections');
+  for (const section of structure.sections) {
+    const endSec = section.endSec ?? section.startSec;
+    const row = document.createElement('div');
+    row.className = 'structure__section-row';
+    row.dataset.type = section.type;
+
+    const swatch = document.createElement('span');
+    swatch.className = 'structure__section-swatch';
+
+    const label = document.createElement('span');
+    label.textContent = `${SECTION_TYPE_LABELS[section.type] || section.type}: ${formatDuration(section.startSec)} – ${formatDuration(endSec)}`;
+
+    row.appendChild(swatch);
+    row.appendChild(label);
+    sectionsBox.appendChild(row);
+  }
+
+  const cuesBox = card.querySelector('.js-structure-cues');
+  structure.hotCues.forEach((cue, i) => {
+    const el = document.createElement('div');
+    el.className = 'structure__cue';
+
+    const badge = document.createElement('span');
+    badge.className = 'structure__cue-badge';
+    badge.dataset.cueIndex = i % 5;
+    badge.textContent = String.fromCharCode(65 + i);
+
+    const text = document.createElement('span');
+    text.textContent = `${formatDuration(cue.timeSec)} — ${cue.label}`;
+
+    el.appendChild(badge);
+    el.appendChild(text);
+    cuesBox.appendChild(el);
+  });
+}
+
+/**
+ * Overlays the color-coded structure blocks and hot-cue flags directly on the
+ * scope canvas, reusing the same (timeSec/durationSec)*100% math as the
+ * spectrogram's own axis overlay so both line up exactly.
+ */
+function renderStructureOverlay(card, data) {
+  const structure = data.structure;
+  const durationSec = data.metadata.durationSec;
+  if (!structure || !(durationSec > 0)) return;
+
+  const strip = card.querySelector('.js-structure-strip');
+  for (const section of structure.sections) {
+    const startPct = (section.startSec / durationSec) * 100;
+    const endSec = section.endSec ?? section.startSec;
+    const widthPct = Math.max(0, ((endSec - section.startSec) / durationSec) * 100);
+
+    const segment = document.createElement('div');
+    segment.className = 'scope__structure-segment';
+    segment.dataset.type = section.type;
+    segment.style.left = `${startPct}%`;
+    segment.style.width = `${widthPct}%`;
+    segment.title = `${SECTION_TYPE_LABELS[section.type] || section.type} — ${formatDuration(section.startSec)}`;
+    strip.appendChild(segment);
+  }
+
+  const cueMarkers = card.querySelector('.js-cue-markers');
+  const cueFlags = card.querySelector('.js-cue-flags');
+  structure.hotCues.forEach((cue, i) => {
+    const leftPct = (cue.timeSec / durationSec) * 100;
+    const colorIndex = i % 5;
+
+    const line = document.createElement('div');
+    line.className = 'scope__cue-line';
+    line.dataset.cueIndex = colorIndex;
+    line.style.left = `${leftPct}%`;
+    cueMarkers.appendChild(line);
+
+    const flag = document.createElement('div');
+    flag.className = 'scope__cue-flag';
+    flag.dataset.cueIndex = colorIndex;
+    flag.style.left = `${leftPct}%`;
+    flag.textContent = String.fromCharCode(65 + i);
+    flag.title = `${formatDuration(cue.timeSec)} — ${cue.label}`;
+    cueFlags.appendChild(flag);
+  });
 }
 
 function renderErrorCard(title, message) {
