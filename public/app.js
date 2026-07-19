@@ -252,6 +252,24 @@ function renderStructureLegend(card, data) {
   const styleConfidence = card.querySelector('.js-structure-style-confidence');
   styleConfidence.textContent = CONFIDENCE_LABELS[structure.mixingStyleConfidence] || '';
 
+  const sectionsBox = card.querySelector('.js-structure-sections');
+  for (const section of structure.sections) {
+    const endSec = section.endSec ?? section.startSec;
+    const row = document.createElement('div');
+    row.className = 'structure__section-row';
+    row.dataset.type = section.type;
+
+    const swatch = document.createElement('span');
+    swatch.className = 'structure__section-swatch';
+
+    const label = document.createElement('span');
+    label.textContent = `${SECTION_TYPE_LABELS[section.type] || section.type}: ${formatDuration(section.startSec)} – ${formatDuration(endSec)}`;
+
+    row.appendChild(swatch);
+    row.appendChild(label);
+    sectionsBox.appendChild(row);
+  }
+
   const cuesBox = card.querySelector('.js-structure-cues');
   for (const cue of structure.hotCues) {
     const el = document.createElement('div');
