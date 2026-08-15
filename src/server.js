@@ -188,11 +188,13 @@ app.delete('/api/cache', (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
-// Serves the audio file downloaded during analysis for the given video id, so the
-// user can save it locally. The file only lives as long as downloadStore's TTL
-// (same 1h window as analysisCache) — after that it's cleaned up and this 404s.
-app.get('/api/download/:id', (req, res) => {
-  const entry = downloadStore.get(req.params.id);
+// Serves the audio file downloaded during analysis for the given video id +
+// variant (native / aac_native / aac_transcoded), so the user can save
+// whichever one they want locally. The file only lives as long as
+// downloadStore's TTL (same 1h window as analysisCache) — after that it's
+// cleaned up and this 404s.
+app.get('/api/download/:videoId/:variantId', (req, res) => {
+  const entry = downloadStore.get(req.params.videoId, req.params.variantId);
   if (!entry) {
     res.status(404).json({ error: 'Arquivo não está mais disponível para download. Analise a faixa novamente.' });
     return;

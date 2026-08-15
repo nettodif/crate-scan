@@ -401,6 +401,68 @@ body {
   color: var(--text-muted);
 }
 
+/* ---------- Variant tabs (multi-format comparison) ---------- */
+
+.variant-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.variant-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: filter 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.variant-tab:hover:not(:disabled) { filter: brightness(1.2); }
+
+.variant-tab--active {
+  color: var(--text);
+  border-color: var(--phosphor-dim);
+  background: var(--bg);
+}
+
+.variant-tab--recommended:not(.variant-tab--disabled) { color: var(--phosphor); }
+
+.variant-tab__badge {
+  color: var(--amber);
+  font-size: 11px;
+}
+
+.variant-tab--disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.variant-panels {
+  display: flex;
+  flex-direction: column;
+}
+
+.variant-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.variant-pane__header {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .meters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

@@ -14,6 +14,7 @@ const analyzeSelectedBtn = document.getElementById('analyzeSelectedBtn');
 const resultsPanel = document.getElementById('resultsPanel');
 const resultsList = document.getElementById('resultsList');
 const trackCardTemplate = document.getElementById('trackCardTemplate');
+const variantPaneTemplate = document.getElementById('variantPaneTemplate');
 
 const cookiesFileInput = document.getElementById('cookiesFileInput');
 const cookiesStatus = document.getElementById('cookiesStatus');
@@ -33,10 +34,25 @@ const STAGE_LABELS = {
   info_start: 'Buscando informações da faixa',
   download_start: 'Baixando áudio',
   metadata_start: 'Lendo metadados',
-  spectrogram_start: 'Gerando espectrograma',
-  fft_start: 'Analisando espectro',
   structure_start: 'Detectando estrutura da faixa',
   cached: 'Encontrado em cache',
+};
+
+// Per-variant stages: fired once per variant (native, and — when the native
+// codec isn't Rekordbox-compatible — aac_native/aac_transcoded too), so the
+// label is built dynamically with the variant name interpolated in.
+const VARIANT_STAGE_LABELS = {
+  variant_fetch_start: 'Buscando',
+  variant_transcode_start: 'Transcodificando',
+  variant_metadata_start: 'Lendo metadados',
+  variant_spectrogram_start: 'Gerando espectrograma',
+  variant_fft_start: 'Analisando espectro',
+};
+
+const VARIANT_ID_LABELS = {
+  native: 'nativo',
+  aac_native: 'AAC nativo',
+  aac_transcoded: 'AAC transcodificado',
 };
 
 const MIXING_STYLE_LABELS = {
@@ -105,6 +121,14 @@ function analyzeTrack(url, { onStage } = {}) {
       source.addEventListener(stage, () => onStage?.(STAGE_LABELS[stage]));
     }
 
+    for (const stage of Object.keys(VARIANT_STAGE_LABELS)) {
+      source.addEventListener(stage, (e) => {
+        const { variantId } = JSON.parse(e.data || '{}');
+        const variantLabel = VARIANT_ID_LABELS[variantId] || variantId;
+        onStage?.(`${VARIANT_STAGE_LABELS[stage]} (${variantLabel})`);
+      });
+    }
+
     source.addEventListener('download_progress', (e) => {
       const { percent } = JSON.parse(e.data);
       if (typeof percent === 'number') onStage?.(`Baixando áudio (${percent.toFixed(0)}%)`);
@@ -143,23 +167,97 @@ function renderTrackCard(data) {
   card.querySelector('.js-title').textContent = data.title || 'Faixa sem título';
   card.querySelector('.js-uploader').textContent = data.uploader ? `por ${data.uploader}` : '';
 
-  card.querySelector('.js-codec').textContent = data.metadata.codecName?.toUpperCase() || '—';
-  card.querySelector('.js-bitrate').textContent = formatBitrate(data.metadata.declaredBitrateBps);
-  card.querySelector('.js-samplerate').textContent = `${(data.metadata.sampleRateHz / 1000).toFixed(1)} kHz`;
-  card.querySelector('.js-channels').textContent = data.metadata.channels === 1 ? 'Mono' : `${data.metadata.channels} canais`;
-  card.querySelector('.js-cutoff').textContent = formatHz(data.spectrum.cutoffHz);
-  card.querySelector('.js-duration').textContent = formatDuration(data.metadata.durationSec);
-
-  const level = data.overallVerdictLevel || 'unknown';
-  const verdictBox = card.querySelector('.js-verdict');
-  verdictBox.dataset.level = level;
-  card.querySelector('.js-verdict-badge').textContent = LEVEL_LABELS[level] || LEVEL_LABELS.unknown;
-  card.querySelector('.js-verdict-text').textContent = data.overallVerdict;
-
-  const notesBox = card.querySelector('.js-notes');
+  const trackNotesBox = card.querySelector('.js-track-notes');
   if (data.notes && data.notes.length > 0) {
-    notesBox.hidden = false;
+    trackNotesBox.hidden = false;
     for (const note of data.notes) {
+      const el = document.createElement('div');
+      el.className = 'notes__item';
+      el.textContent = note;
+      trackNotesBox.appendChild(el);
+    }
+  } else {
+    trackNotesBox.hidden = true;
+  }
+
+  const tabsBox = card.querySelector('.js-variant-tabs');
+  const panelsBox = card.querySelector('.js-variant-panels');
+
+  for (const variant of data.variants) {
+    const tabBtn = document.createElement('button');
+    tabBtn.type = 'button';
+    tabBtn.className = 'variant-tab js-variant-tab';
+    tabBtn.dataset.variantId = variant.variantId;
+
+    if (variant.variantId === data.recommendedVariantId) {
+      tabBtn.classList.add('variant-tab--recommended');
+      const badge = document.createElement('span');
+      badge.className = 'variant-tab__badge';
+      badge.textContent = '★';
+      tabBtn.appendChild(badge);
+    }
+    tabBtn.appendChild(document.createTextNode(variant.label));
+
+    if (!variant.available) {
+      tabBtn.classList.add('variant-tab--disabled');
+      tabBtn.disabled = true;
+      tabBtn.title = variant.unavailableReason || 'Indisponível';
+      tabsBox.appendChild(tabBtn);
+      continue;
+    }
+
+    tabBtn.addEventListener('click', () => activateVariantTab(card, variant.variantId));
+    tabsBox.appendChild(tabBtn);
+
+    const pane = renderVariantPane(variant, data.structure);
+    panelsBox.appendChild(pane);
+  }
+
+  const initialVariantId = data.variants.find((v) => v.variantId === data.recommendedVariantId && v.available)?.variantId
+    || data.variants.find((v) => v.available)?.variantId;
+  if (initialVariantId) activateVariantTab(card, initialVariantId);
+
+  const clearCacheForTrackBtn = card.querySelector('.js-clear-cache-btn');
+  clearCacheForTrackBtn.addEventListener('click', () => clearCacheForVideo(data.videoId, clearCacheForTrackBtn));
+
+  resultsList.appendChild(fragment);
+  resultsPanel.hidden = false;
+}
+
+function activateVariantTab(card, variantId) {
+  card.querySelectorAll('.js-variant-tab').forEach((btn) => {
+    btn.classList.toggle('variant-tab--active', btn.dataset.variantId === variantId);
+  });
+  card.querySelectorAll('.variant-pane').forEach((pane) => {
+    pane.hidden = pane.dataset.variantId !== variantId;
+  });
+}
+
+function renderVariantPane(variant, structure) {
+  const fragment = variantPaneTemplate.content.cloneNode(true);
+  const pane = fragment.querySelector('.variant-pane');
+  pane.dataset.variantId = variant.variantId;
+
+  pane.querySelector('.js-codec').textContent = variant.metadata.codecName?.toUpperCase() || '—';
+  pane.querySelector('.js-bitrate').textContent = formatBitrate(variant.metadata.declaredBitrateBps);
+  pane.querySelector('.js-samplerate').textContent = `${(variant.metadata.sampleRateHz / 1000).toFixed(1)} kHz`;
+  pane.querySelector('.js-channels').textContent = variant.metadata.channels === 1 ? 'Mono' : `${variant.metadata.channels} canais`;
+  pane.querySelector('.js-cutoff').textContent = formatHz(variant.spectrum.cutoffHz);
+  pane.querySelector('.js-duration').textContent = formatDuration(variant.metadata.durationSec);
+
+  const level = variant.spectrum.verdictLevel || 'unknown';
+  const verdictBox = pane.querySelector('.js-verdict');
+  verdictBox.dataset.level = level;
+  pane.querySelector('.js-verdict-badge').textContent = LEVEL_LABELS[level] || LEVEL_LABELS.unknown;
+  pane.querySelector('.js-verdict-text').textContent = variant.spectrum.verdict;
+
+  const notesBox = pane.querySelector('.js-notes');
+  const notes = variant.isTranscoded
+    ? ['Transcodificado a partir do arquivo nativo — carrega perda de geração real (dupla compressão lossy).']
+    : [];
+  if (notes.length > 0) {
+    notesBox.hidden = false;
+    for (const note of notes) {
       const el = document.createElement('div');
       el.className = 'notes__item';
       el.textContent = note;
@@ -169,23 +267,18 @@ function renderTrackCard(data) {
     notesBox.hidden = true;
   }
 
-  card.querySelector('.js-spectrogram').src = `${data.spectrogramUrl}?t=${Date.now()}`;
-  renderSpectrogramAxis(card, data);
-  renderStructureOverlay(card, data);
-  renderStructureLegend(card, data);
+  pane.querySelector('.js-spectrogram').src = `${variant.spectrogramUrl}?t=${Date.now()}`;
+  renderSpectrogramAxis(pane, variant);
+  renderStructureOverlay(pane, variant, structure);
+  renderStructureLegend(pane, structure);
 
-  const downloadLink = card.querySelector('.js-download-link');
-  if (data.downloadUrl) {
-    downloadLink.href = data.downloadUrl;
-    downloadLink.download = `${(data.title || 'faixa').replace(/[\\/:*?"<>|]+/g, '_')}`;
+  const downloadLink = pane.querySelector('.js-download-link');
+  if (variant.downloadUrl) {
+    downloadLink.href = variant.downloadUrl;
     downloadLink.hidden = false;
   }
 
-  const clearCacheForTrackBtn = card.querySelector('.js-clear-cache-btn');
-  clearCacheForTrackBtn.addEventListener('click', () => clearCacheForVideo(data.videoId, clearCacheForTrackBtn));
-
-  resultsList.appendChild(fragment);
-  resultsPanel.hidden = false;
+  return pane;
 }
 
 /**
@@ -193,11 +286,11 @@ function renderTrackCard(data) {
  * spectrogram data edge-to-edge: y=0 is DC, y=100% is Nyquist, x=0 is track start,
  * x=100% is track end. That makes our own axis/cutoff overlay a simple % mapping.
  */
-function renderSpectrogramAxis(card, data) {
-  const nyquist = data.metadata.sampleRateHz / 2;
-  const durationSec = data.metadata.durationSec;
+function renderSpectrogramAxis(container, variant) {
+  const nyquist = variant.metadata.sampleRateHz / 2;
+  const durationSec = variant.metadata.durationSec;
 
-  const axisY = card.querySelector('.js-axis-y');
+  const axisY = container.querySelector('.js-axis-y');
   for (const hz of FREQ_TICKS_HZ) {
     if (hz > nyquist) continue;
     const label = document.createElement('span');
@@ -206,7 +299,7 @@ function renderSpectrogramAxis(card, data) {
     axisY.appendChild(label);
   }
 
-  const axisX = card.querySelector('.js-axis-x');
+  const axisX = container.querySelector('.js-axis-x');
   if (durationSec > 0) {
     for (const fraction of [0, 0.25, 0.5, 0.75, 1]) {
       const label = document.createElement('span');
@@ -216,12 +309,12 @@ function renderSpectrogramAxis(card, data) {
     }
   }
 
-  const cutoffHz = data.spectrum.cutoffHz;
+  const cutoffHz = variant.spectrum.cutoffHz;
   if (cutoffHz > 0 && cutoffHz <= nyquist) {
-    const cutoffLine = card.querySelector('.js-cutoff-line');
+    const cutoffLine = container.querySelector('.js-cutoff-line');
     cutoffLine.style.top = `${(1 - cutoffHz / nyquist) * 100}%`;
     cutoffLine.style.display = 'block';
-    cutoffLine.dataset.level = data.overallVerdictLevel || 'unknown';
+    cutoffLine.dataset.level = variant.spectrum.verdictLevel || 'unknown';
     cutoffLine.querySelector('.js-cutoff-label').textContent = `corte: ${formatHz(cutoffHz)}`;
   }
 }
@@ -236,10 +329,10 @@ const SECTION_TYPE_LABELS = {
 /**
  * Structure/hot-cue suggestions are heuristic (energy-envelope based, see
  * structureAnalyzer.js) — older cached results may not have a `structure` field.
+ * Shared across every variant's pane (musical arrangement doesn't depend on codec).
  */
-function renderStructureLegend(card, data) {
+function renderStructureLegend(card, structure) {
   const box = card.querySelector('.js-structure');
-  const structure = data.structure;
   if (!structure) {
     box.hidden = true;
     return;
@@ -292,11 +385,12 @@ function renderStructureLegend(card, data) {
 /**
  * Overlays the color-coded structure blocks and hot-cue flags directly on the
  * scope canvas, reusing the same (timeSec/durationSec)*100% math as the
- * spectrogram's own axis overlay so both line up exactly.
+ * spectrogram's own axis overlay so both line up exactly. structure is shared
+ * across every variant's pane; durationSec comes from that variant's own
+ * metadata (effectively identical across variants of the same track).
  */
-function renderStructureOverlay(card, data) {
-  const structure = data.structure;
-  const durationSec = data.metadata.durationSec;
+function renderStructureOverlay(card, variant, structure) {
+  const durationSec = variant.metadata.durationSec;
   if (!structure || !(durationSec > 0)) return;
 
   const strip = card.querySelector('.js-structure-strip');
