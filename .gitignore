@@ -2,3 +2,4 @@ node_modules/
 public/spectrograms/*.png
 .env
 data/
+.claude/launch.json
