@@ -99,6 +99,12 @@ instalar nada a mais. Se for rodar yt-dlp manualmente fora do app, adicione
 Com cookies válidos, o app já escolhe automaticamente o melhor formato disponível
 (`-f bestaudio/best`) — nenhuma configuração extra é necessária além do acima.
 
+Se aparecer `HTTP Error 403: Forbidden` ao baixar uma faixa **sem** cookie configurado
+(diferente do erro acima — a listagem de formatos funciona, só a URL do arquivo de áudio
+em si é rejeitada), é o YouTube bloqueando acesso anônimo de forma inconsistente
+(por vídeo/região/momento), não um problema do app. Enviar um cookies.txt de uma conta
+logada normalmente resolve — não precisa ser Premium, só uma conta autenticada.
+
 ## Rodando localmente
 
 ```bash

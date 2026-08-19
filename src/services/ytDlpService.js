@@ -102,20 +102,39 @@ function describeYtDlpFailure(stdErr) {
   if (cookieStore.getPath() && stdErr.includes('Requested format is not available')) {
     return `${stdErr}\n\nIsso pode indicar que o cookie enviado expirou ou está inválido — tente exportar um cookies.txt novo.`;
   }
+  // Anonymous (no-cookie) requests are the ones YouTube's anti-bot layer polices
+  // hardest — the actual media URL can come back 403 even though format listing
+  // worked fine, while an authenticated session for the same video succeeds. This
+  // is inherently unpredictable (varies by video/region/moment), so hint at the
+  // one thing under the user's control instead of leaving them with a raw error.
+  if (!authArgs().length && /HTTP Error 403/i.test(stdErr)) {
+    return `${stdErr}\n\nSem uma conta autenticada, o YouTube às vezes bloqueia o download do áudio mesmo em vídeos públicos ` +
+      '(erro 403), de forma inconsistente. Enviar um cookies.txt de uma conta logada ("Enviar cookies.txt" na UI) costuma resolver.';
+  }
   return stdErr;
 }
 
-export async function downloadAsync(url, info, { onProgress } = {}) {
+/**
+ * Allocates a fresh, isolated temp directory under tempRoot. Every variant
+ * (native download, native-AAC download, AAC transcode) gets its own — never
+ * shared — because downloadStore's TTL cleanup removes a variant's entire
+ * parent directory, and sharing one would let one variant's expiry delete a
+ * file another still-live variant depends on.
+ */
+export async function createTempJobDirAsync() {
   await fs.mkdir(tempRoot, { recursive: true });
-
   const jobId = randomUUID().replace(/-/g, '');
   const jobDir = path.join(tempRoot, jobId);
   await fs.mkdir(jobDir, { recursive: true });
+  return jobDir;
+}
 
+async function downloadWithFormatAsync(url, info, formatSelector, { onProgress } = {}) {
+  const jobDir = await createTempJobDirAsync();
   const outputTemplate = path.join(jobDir, '%(id)s.%(ext)s');
 
   const args = [
-    '-f', 'bestaudio/best',
+    '-f', formatSelector,
     '--no-playlist',
     '--newline',
     ...JS_RUNTIME_ARGS,
@@ -136,7 +155,9 @@ export async function downloadAsync(url, info, { onProgress } = {}) {
   const result = await runAsync(config.ytDlpPath, args, { onStdout });
 
   if (result.exitCode !== 0) {
-    throw new Error(`Falha ao baixar áudio com yt-dlp (código ${result.exitCode}). Detalhe: ${describeYtDlpFailure(result.stdErr)}`);
+    const err = new Error(`Falha ao baixar áudio com yt-dlp (código ${result.exitCode}). Detalhe: ${describeYtDlpFailure(result.stdErr)}`);
+    err.formatUnavailable = /Requested format is not available/i.test(result.stdErr);
+    throw err;
   }
 
   const lines = result.stdOut
@@ -160,6 +181,26 @@ export async function downloadAsync(url, info, { onProgress } = {}) {
   const cookieInvalid = cookieStore.getPath() !== null && hasInvalidCookieWarning(result.stdErr);
 
   return { filePath, id, title, uploader, durationSec: duration, sourceFormat, cookieInvalid };
+}
+
+export async function downloadAsync(url, info, opts = {}) {
+  return downloadWithFormatAsync(url, info, 'bestaudio/best', opts);
+}
+
+/**
+ * Best-effort download with a caller-supplied format selector (e.g. a
+ * codec-targeted AAC selector) — used for optional variants that shouldn't
+ * fail the whole analysis when yt-dlp can't resolve a matching format.
+ * Returns null instead of throwing when the format genuinely isn't
+ * available; any other failure (network, etc.) still propagates.
+ */
+export async function downloadVariantAsync(url, info, formatSelector, opts = {}) {
+  try {
+    return await downloadWithFormatAsync(url, info, formatSelector, opts);
+  } catch (err) {
+    if (err.formatUnavailable) return null;
+    throw err;
+  }
 }
 
 function parseSourceFormatLine(line) {

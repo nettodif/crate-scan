@@ -39,6 +39,29 @@ export async function remuxForDownloadAsync(filePath, codecName) {
   return outputPath;
 }
 
+/**
+ * Real transcode (decode + re-encode), not the stream-copy remux above — used
+ * to produce an AAC reference variant from a source codec (e.g. Opus) that
+ * has no lossless path into an AAC/m4a container. Uses ffmpeg's built-in aac
+ * encoder rather than libfdk_aac, which isn't guaranteed present in the
+ * Docker image's ffmpeg build. outputDir must be a dedicated temp dir (never
+ * the source file's own jobDir) so this variant's lifecycle in downloadStore
+ * stays independent of the source variant's.
+ */
+export async function transcodeToAacAsync(filePath, outputDir, { bitrateKbps = 256 } = {}) {
+  const baseName = path.parse(filePath).name;
+  const outputPath = path.join(outputDir, `${baseName}.m4a`);
+  const args = ['-y', '-i', filePath, '-vn', '-acodec', 'aac', '-b:a', `${bitrateKbps}k`, outputPath];
+
+  const result = await runAsync(config.ffmpegPath, args);
+  try {
+    await fs.access(outputPath);
+  } catch {
+    throw new Error(`ffmpeg falhou ao transcodificar para AAC: ${result.stdErr}`);
+  }
+  return outputPath;
+}
+
 export async function getMetadataAsync(filePath) {
   const args = [
     '-v', 'quiet',

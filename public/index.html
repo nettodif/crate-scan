@@ -87,8 +87,20 @@
           </div>
           <div class="track-info__actions">
             <button class="btn btn--download js-clear-cache-btn">Limpar cache</button>
-            <a class="btn btn--download js-download-link" download hidden>Baixar áudio</a>
           </div>
+        </div>
+
+        <div class="notes js-track-notes" hidden></div>
+
+        <div class="variant-tabs js-variant-tabs"></div>
+        <div class="variant-panels js-variant-panels"></div>
+      </article>
+    </template>
+
+    <template id="variantPaneTemplate">
+      <div class="variant-pane">
+        <div class="variant-pane__header">
+          <a class="btn btn--download js-download-link" download hidden>Baixar áudio</a>
         </div>
 
         <div class="meters">
@@ -154,7 +166,7 @@
             </div>
           </div>
         </div>
-      </article>
+      </div>
     </template>
 
   </div>
