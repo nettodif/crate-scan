@@ -159,6 +159,7 @@ export async function runAnalysis(url, { onProgress } = {}) {
           spectrum: null,
           spectrogramUrl: null,
           downloadUrl: null,
+          qualityRank: null,
         };
       }
       return {
@@ -172,10 +173,11 @@ export async function runAnalysis(url, { onProgress } = {}) {
         spectrum: source.spectrum,
         spectrogramUrl: source.spectrogramUrl,
         downloadUrl: `/api/download/${info.id}/${variantId}`,
+        qualityRank: null,
       };
     });
 
-    const recommendedVariantId = pickRecommendedVariant(variants);
+    const recommendedVariantId = rankVariantsByQuality(variants);
     const recommended = variants.find((v) => v.variantId === recommendedVariantId);
 
     const notes = [
@@ -245,19 +247,21 @@ function buildVariantLabel(variantId, codecName) {
 }
 
 /**
- * Highest measured spectral cutoff among available variants wins; an exact
- * tie prefers the non-transcoded option (no generation loss). Deliberately
- * doesn't exclude aac_transcoded from candidacy outright — if it genuinely
- * measures best (e.g. AAC native was unavailable), it can still win, and a
- * note is added to flag that it's a transcode regardless.
+ * Sorts available variants by measured quality (highest cutoffHz wins; an
+ * exact tie prefers the non-transcoded option) and assigns each a 1-based
+ * qualityRank in place, so the UI can show "1st/2nd/3rd" across every tab,
+ * not just flag a single winner. Returns the rank-1 variant's id (the
+ * recommendation). Unavailable variants keep qualityRank: null — there's no
+ * measurement to rank them by.
  */
-function pickRecommendedVariant(variants) {
+function rankVariantsByQuality(variants) {
   const available = variants.filter((v) => v.available);
   const sorted = [...available].sort((a, b) => {
     if (b.spectrum.cutoffHz !== a.spectrum.cutoffHz) return b.spectrum.cutoffHz - a.spectrum.cutoffHz;
     if (a.isTranscoded !== b.isTranscoded) return a.isTranscoded ? 1 : -1;
     return 0;
   });
+  sorted.forEach((variant, index) => { variant.qualityRank = index + 1; });
   return sorted[0]?.variantId ?? null;
 }
 

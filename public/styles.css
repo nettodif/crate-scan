@@ -436,8 +436,31 @@ body {
 .variant-tab--recommended:not(.variant-tab--disabled) { color: var(--phosphor); }
 
 .variant-tab__badge {
-  color: var(--amber);
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--panel);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.variant-tab__badge[data-rank="1"] {
+  background: var(--phosphor);
+  border-color: var(--phosphor);
+  color: #0B1A0D;
+}
+
+.variant-tab__badge[data-rank="2"] {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #2A1B00;
 }
 
 .variant-tab--disabled {

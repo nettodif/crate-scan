@@ -191,9 +191,12 @@ function renderTrackCard(data) {
 
     if (variant.variantId === data.recommendedVariantId) {
       tabBtn.classList.add('variant-tab--recommended');
+    }
+    if (variant.qualityRank) {
       const badge = document.createElement('span');
       badge.className = 'variant-tab__badge';
-      badge.textContent = '★';
+      badge.dataset.rank = variant.qualityRank;
+      badge.textContent = variant.qualityRank;
       tabBtn.appendChild(badge);
     }
     tabBtn.appendChild(document.createTextNode(variant.label));
