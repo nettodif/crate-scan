@@ -102,6 +102,15 @@ function describeYtDlpFailure(stdErr) {
   if (cookieStore.getPath() && stdErr.includes('Requested format is not available')) {
     return `${stdErr}\n\nIsso pode indicar que o cookie enviado expirou ou está inválido — tente exportar um cookies.txt novo.`;
   }
+  // Anonymous (no-cookie) requests are the ones YouTube's anti-bot layer polices
+  // hardest — the actual media URL can come back 403 even though format listing
+  // worked fine, while an authenticated session for the same video succeeds. This
+  // is inherently unpredictable (varies by video/region/moment), so hint at the
+  // one thing under the user's control instead of leaving them with a raw error.
+  if (!authArgs().length && /HTTP Error 403/i.test(stdErr)) {
+    return `${stdErr}\n\nSem uma conta autenticada, o YouTube às vezes bloqueia o download do áudio mesmo em vídeos públicos ` +
+      '(erro 403), de forma inconsistente. Enviar um cookies.txt de uma conta logada ("Enviar cookies.txt" na UI) costuma resolver.';
+  }
   return stdErr;
 }
 
