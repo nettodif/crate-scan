@@ -31,6 +31,10 @@ const downloadUrlBtn = document.getElementById('downloadUrlBtn');
 const downloadUrlBtnLabel = document.getElementById('downloadUrlBtnLabel');
 const downloadErrorHint = document.getElementById('downloadErrorHint');
 
+const librarySubfolderInput = document.getElementById('librarySubfolderInput');
+const useAggregatingFolderCheckbox = document.getElementById('useAggregatingFolderCheckbox');
+const useTrackNumberCheckbox = document.getElementById('useTrackNumberCheckbox');
+
 const downloadPlaylistPanel = document.getElementById('downloadPlaylistPanel');
 const downloadPlaylistList = document.getElementById('downloadPlaylistList');
 const downloadPlaylistCount = document.getElementById('downloadPlaylistCount');
@@ -61,7 +65,13 @@ const DOWNLOAD_STAGE_LABELS = {
   info_start: 'Buscando informações da faixa',
   download_start: 'Baixando áudio',
   remux_start: 'Preparando arquivo',
+  save_start: 'Salvando na biblioteca',
 };
+
+// Set by startDownload() right before rendering the playlist panel, so
+// downloadSelected() (fired later, once the user confirms the selection)
+// still knows the playlist's own title for the aggregating-folder option.
+let currentPlaylistTitle = null;
 
 // Per-variant stages: fired once per variant (native, and — when the native
 // codec isn't Rekordbox-compatible — aac_native/aac_transcoded too), so the
@@ -638,22 +648,24 @@ function renderDownloadLogRow(title) {
   return { row, statusEl };
 }
 
-function markDownloadRowDone({ row, statusEl }, downloadUrl, cookieInvalid) {
+function markDownloadRowDone({ row, statusEl }, data) {
   row.dataset.state = 'done';
   statusEl.textContent = '';
 
-  if (cookieInvalid) {
+  if (data.cookieInvalid) {
     const warning = document.createElement('span');
     warning.className = 'download-log__warning';
     warning.textContent = 'Cookie inválido — baixado sem autenticação. ';
     statusEl.appendChild(warning);
   }
 
-  statusEl.appendChild(document.createTextNode('Concluído — '));
+  const savedText = document.createElement('span');
+  savedText.textContent = data.savedPath ? `Salvo em: ${data.savedPath} — ` : 'Concluído — ';
+  statusEl.appendChild(savedText);
 
   const link = document.createElement('a');
   link.className = 'btn btn--download';
-  link.href = downloadUrl;
+  link.href = data.downloadUrl;
   link.download = '';
   link.textContent = 'Baixar novamente';
   statusEl.appendChild(link);
@@ -664,13 +676,25 @@ function markDownloadRowError({ row, statusEl }, message) {
   statusEl.textContent = message;
 }
 
-function triggerBrowserDownload(downloadUrl) {
-  const link = document.createElement('a');
-  link.href = downloadUrl;
-  link.download = '';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+/**
+ * Builds where a track lands in the library: subfolder = the base subpasta
+ * input plus the playlist/album title (when downloading more than one track,
+ * the toggle is on, and a playlist title was actually resolved), and
+ * fileNameBase = the track title, optionally prefixed with its 1-based
+ * playlist position.
+ */
+function computeDestination(entry, index, entries, playlistTitle) {
+  const baseSubfolder = librarySubfolderInput.value.trim();
+  const isMulti = entries.length > 1;
+  const aggregateFolder = isMulti && useAggregatingFolderCheckbox.checked && playlistTitle ? playlistTitle : null;
+  const subfolder = [baseSubfolder, aggregateFolder].filter(Boolean).join('/');
+
+  const numberPrefix = isMulti && useTrackNumberCheckbox.checked
+    ? `${String(index + 1).padStart(2, '0')} - `
+    : '';
+  const fileNameBase = `${numberPrefix}${entry.title}`;
+
+  return { subfolder, fileNameBase };
 }
 
 /**
@@ -678,9 +702,14 @@ function triggerBrowserDownload(downloadUrl) {
  * no spectrogram/FFT). Resolves with the result on 'done', rejects with an
  * Error carrying .title/.detail on 'error'. Mirrors analyzeTrack().
  */
-function downloadTrack(url, { onStage } = {}) {
+function downloadTrack(url, destination, { onStage } = {}) {
   return new Promise((resolve, reject) => {
-    const source = new EventSource(`/api/download-track/stream?url=${encodeURIComponent(url)}`);
+    const params = new URLSearchParams({
+      url,
+      subfolder: destination.subfolder,
+      fileNameBase: destination.fileNameBase,
+    });
+    const source = new EventSource(`/api/download-track/stream?${params.toString()}`);
 
     for (const stage of Object.keys(DOWNLOAD_STAGE_LABELS)) {
       source.addEventListener(stage, () => onStage?.(DOWNLOAD_STAGE_LABELS[stage]));
@@ -716,7 +745,7 @@ function downloadTrack(url, { onStage } = {}) {
   });
 }
 
-async function downloadTracks(entries) {
+async function downloadTracks(entries, playlistTitle) {
   downloadErrorHint.textContent = '';
   setDownloadBusy(true);
 
@@ -724,16 +753,16 @@ async function downloadTracks(entries) {
     const entry = entries[i];
     const prefix = entries.length > 1 ? `[${i + 1}/${entries.length}] ${entry.title} — ` : '';
     const rowRefs = renderDownloadLogRow(entry.title);
+    const destination = computeDestination(entry, i, entries, playlistTitle);
 
     try {
-      const data = await downloadTrack(entry.url, {
+      const data = await downloadTrack(entry.url, destination, {
         onStage: (label) => {
           setStatus('loading', `${prefix}${label}`);
           rowRefs.statusEl.textContent = label;
         },
       });
-      markDownloadRowDone(rowRefs, data.downloadUrl, data.cookieInvalid);
-      triggerBrowserDownload(data.downloadUrl);
+      markDownloadRowDone(rowRefs, data);
     } catch (err) {
       console.error(`Falha ao baixar "${entry.title}"`, err);
       markDownloadRowError(rowRefs, err.message);
@@ -756,16 +785,20 @@ async function startDownload() {
   setDownloadBusy(true, 'Buscando faixas…');
 
   let entries;
+  let playlistTitle;
   try {
     const res = await fetch(`/api/playlist/entries?url=${encodeURIComponent(url)}`);
     const body = await res.json();
     if (!res.ok) throw new Error(body.detail || body.error || 'Falha ao listar faixas.');
     entries = body.entries;
+    playlistTitle = body.playlistTitle;
   } catch (err) {
     downloadErrorHint.textContent = err.message;
     setDownloadBusyError('Falha ao listar faixas');
     return;
   }
+
+  currentPlaylistTitle = playlistTitle;
 
   if (entries.length > 1) {
     renderDownloadPlaylist(entries);
@@ -773,7 +806,7 @@ async function startDownload() {
     return;
   }
 
-  await downloadTracks([entries[0]]);
+  await downloadTracks([entries[0]], playlistTitle);
 }
 
 async function downloadSelected() {
@@ -786,7 +819,7 @@ async function downloadSelected() {
   const entries = checked.map((c) => ({ url: c.dataset.url, title: c.dataset.title }));
   downloadLogList.innerHTML = '';
   downloadLogPanel.hidden = true;
-  await downloadTracks(entries);
+  await downloadTracks(entries, currentPlaylistTitle);
 }
 
 function updateCookiesStatus(hasCookies, label) {

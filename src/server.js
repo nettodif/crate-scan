@@ -48,8 +48,8 @@ app.get('/api/playlist/entries', async (req, res) => {
   }
 
   try {
-    const entries = await ytDlp.fetchPlaylistEntriesAsync(url);
-    res.status(200).json({ entries });
+    const { entries, playlistTitle } = await ytDlp.fetchPlaylistEntriesAsync(url);
+    res.status(200).json({ entries, playlistTitle });
   } catch (err) {
     console.error('Falha ao listar faixas', err);
     res.status(502).json({ error: 'Falha ao listar faixas da URL informada.', detail: err.message });
@@ -110,9 +110,13 @@ app.get('/api/download-track/stream', async (req, res) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
   };
 
+  const subfolder = typeof req.query?.subfolder === 'string' ? req.query.subfolder : '';
+  const fileNameBase = typeof req.query?.fileNameBase === 'string' ? req.query.fileNameBase : '';
+
   try {
     const result = await runDownload(url, {
       onProgress: (stage, data) => send(stage, data),
+      destination: { subfolder, fileNameBase },
     });
     send('done', result);
   } catch (err) {
@@ -146,7 +150,7 @@ app.get('/api/analyze-playlist/stream', async (req, res) => {
 
   let entries;
   try {
-    entries = await ytDlp.fetchPlaylistEntriesAsync(url);
+    ({ entries } = await ytDlp.fetchPlaylistEntriesAsync(url));
   } catch (err) {
     console.error('Falha ao listar playlist', err);
     send('error', { title: 'Falha ao listar playlist', detail: err.message });

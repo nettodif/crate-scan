@@ -105,6 +105,30 @@
         <p class="panel__hint" id="downloadErrorHint"></p>
       </section>
 
+      <section class="panel panel--organize">
+        <label for="librarySubfolderInput" class="panel__label">Subpasta na biblioteca (opcional)</label>
+        <input
+          type="text"
+          id="librarySubfolderInput"
+          placeholder="ex: DJ Sets/2026"
+          autocomplete="off"
+        />
+        <div class="organize__toggles">
+          <label class="organize__toggle">
+            <input type="checkbox" id="useAggregatingFolderCheckbox" checked />
+            Criar pasta com nome da playlist/álbum
+          </label>
+          <label class="organize__toggle">
+            <input type="checkbox" id="useTrackNumberCheckbox" checked />
+            Numerar faixas (01, 02, ...)
+          </label>
+        </div>
+        <p class="panel__hint panel__hint--muted panel__hint--info">
+          Os arquivos são salvos direto na biblioteca do servidor (pasta configurada via
+          LIBRARY_ROOT) — o link "Baixar novamente" no log continua disponível como reserva.
+        </p>
+      </section>
+
       <section class="panel panel--playlist" id="downloadPlaylistPanel" hidden>
         <div class="playlist__header">
           <label class="playlist__select-all">

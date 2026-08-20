@@ -215,8 +215,11 @@ function parseSourceFormatLine(line) {
 
 /**
  * Lists the entries of a playlist URL without downloading anything (flat-playlist).
- * Returns one { id, url, title } per entry, in playlist order. Works for a plain
- * (non-playlist) video URL too — resolves to a single-item array in that case.
+ * Returns { entries, playlistTitle }: one { id, url, title } per entry, in playlist
+ * order, plus the playlist's own title (yt-dlp injects playlist_title/playlist onto
+ * every flat-playlist entry when the URL actually is a playlist). Works for a plain
+ * (non-playlist) video URL too — resolves to a single-item entries array with
+ * playlistTitle: null in that case.
  */
 export async function fetchPlaylistEntriesAsync(url) {
   const args = ['--flat-playlist', ...JS_RUNTIME_ARGS, ...authArgs(), '--dump-json', url];
@@ -226,7 +229,7 @@ export async function fetchPlaylistEntriesAsync(url) {
     throw new Error(`Falha ao listar playlist com yt-dlp (código ${result.exitCode}). Detalhe: ${describeYtDlpFailure(result.stdErr)}`);
   }
 
-  const entries = result.stdOut
+  const rawEntries = result.stdOut
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
@@ -237,19 +240,22 @@ export async function fetchPlaylistEntriesAsync(url) {
         return null;
       }
     })
-    .filter((entry) => entry !== null)
-    .map((entry) => {
-      const id = entry.id ?? 'unknown';
-      const rawUrl = entry.webpage_url ?? entry.url ?? '';
-      const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : url;
-      return { id, url: resolvedUrl, title: entry.title ?? 'Título desconhecido' };
-    });
+    .filter((entry) => entry !== null);
 
-  if (entries.length === 0) {
+  if (rawEntries.length === 0) {
     throw new Error('yt-dlp não retornou nenhuma faixa para essa URL.');
   }
 
-  return entries;
+  const entries = rawEntries.map((entry) => {
+    const id = entry.id ?? 'unknown';
+    const rawUrl = entry.webpage_url ?? entry.url ?? '';
+    const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : url;
+    return { id, url: resolvedUrl, title: entry.title ?? 'Título desconhecido' };
+  });
+
+  const playlistTitle = rawEntries[0]?.playlist_title ?? rawEntries[0]?.playlist ?? null;
+
+  return { entries, playlistTitle };
 }
 
 export async function fetchInfoAsync(url) {

@@ -139,6 +139,15 @@ O `docker-compose.yml` já vem com dois volumes nomeados que persistem entre res
   "Enviar cookies.txt" funciona exatamente igual ao rodando local — é o jeito recomendado de
   configurar autenticação em Docker (veja a seção acima).
 
+Além desses, a biblioteca organizada (`LIBRARY_ROOT`, ver seção acima sobre o modo
+"Baixar") vem montada como **bind-mount pro host** (não volume nomeado) por padrão, em
+`./data/library`, pra dar pra abrir os arquivos direto no explorador de arquivos/Rekordbox
+sem precisar entrar no container. Pra apontar pra outra pasta do host:
+
+```bash
+LIBRARY_HOST_PATH=/caminho/no/host/minha-musica docker compose up --build
+```
+
 Pra mudar a porta exposta no host, edite o mapeamento `ports` em `docker-compose.yml`
 (ex. `"8080:5178"`).
 
@@ -162,8 +171,10 @@ create-scan/
       ffmpegService.js            # metadados + espectrograma + decodificação PCM + remux
       spectrumAnalyzer.js         # FFT e heurística de corte espectral
       analysisPipeline.js         # orquestra download → metadados → espectro → veredito
+      downloadPipeline.js         # modo "Baixar": só download + remux, sem análise
       analysisCache.js            # cache em memória por videoId (TTL 1h)
       downloadStore.js            # mantém o áudio baixado disponível pra download local
+      libraryStore.js             # copia o download final pra dentro de LIBRARY_ROOT, organizado
       cookieStore.js              # cookies.txt enviado pela UI
       reportGenerator.js          # export de relatório em CSV/PDF
       processRunner.js            # helper para rodar processos externos
@@ -187,6 +198,13 @@ create-scan/
 - **Download local**: depois de analisada, a faixa fica disponível pra baixar
   (`GET /api/download/:id`), remuxada pra uma extensão compatível com o codec real (sem
   reencode) — ver seção de cookies acima pra qualidade mais alta.
+- **Modo "Baixar" (aba separada da análise)**: cole uma URL de faixa, álbum ou playlist e
+  baixe o áudio nativo direto, sem rodar espectrograma/FFT. Cada faixa baixada é
+  automaticamente copiada pra dentro da biblioteca local organizada (pasta configurada via
+  `LIBRARY_ROOT`, padrão `data/library`) — dá pra definir uma subpasta de destino, ligar
+  uma pasta agregadora com o nome da playlist/álbum e numerar as faixas na ordem original
+  (`01 - `, `02 - `, ...). O link "Baixar novamente" (`GET /api/download-track/stream`)
+  continua disponível como reserva além da cópia salva na biblioteca.
 - **Cache de análise**: resultado fica em memória por `videoId` (TTL 1h); "Limpar cache" na
   UI invalida uma faixa específica ou tudo, útil depois de configurar/trocar um cookie.
 - **Exportar relatório**: `POST /api/report?format=csv|pdf`, body `{ sessions: [...] }` com

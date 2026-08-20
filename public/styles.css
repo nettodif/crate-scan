@@ -277,6 +277,43 @@ body {
   color: var(--text-muted);
 }
 
+/* ---------- Organize (library destination, Baixar mode) ---------- */
+
+.panel--organize #librarySubfolderInput {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.panel--organize #librarySubfolderInput:focus {
+  border-color: var(--phosphor-dim);
+}
+
+.organize__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin-top: 14px;
+}
+
+.organize__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.organize__toggle input { width: 16px; height: 16px; accent-color: var(--phosphor); cursor: pointer; }
+
 /* ---------- Playlist selection ---------- */
 
 .panel--playlist {

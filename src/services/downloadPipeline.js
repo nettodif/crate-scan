@@ -1,7 +1,9 @@
 import path from 'node:path';
+import { config } from '../config.js';
 import * as ytDlp from './ytDlpService.js';
 import * as ffmpeg from './ffmpegService.js';
 import * as downloadStore from './downloadStore.js';
+import * as libraryStore from './libraryStore.js';
 
 // Distinct from any variantId analysisPipeline.js ever uses ('native',
 // 'aac_native', 'aac_transcoded') so a download-only run never collides with
@@ -15,8 +17,14 @@ const DOWNLOAD_VARIANT_ID = 'download';
  * organize locally and don't need the quality pre-analysis. Mirrors
  * runAnalysis's onProgress(stage, data) callback shape so the SSE route can
  * reuse the same event-forwarding pattern.
+ *
+ * destination ({ subfolder, fileNameBase }) is always saved into the library
+ * (config.libraryRoot) — subfolder '' just means the library's root. The
+ * original temp file is still kept in downloadStore afterward so the manual
+ * "baixar novamente" link keeps working as a fallback alongside the copy
+ * that landed in the library.
  */
-export async function runDownload(url, { onProgress } = {}) {
+export async function runDownload(url, { onProgress, destination } = {}) {
   const emit = (stage, data) => onProgress?.(stage, data);
 
   emit('info_start');
@@ -44,6 +52,20 @@ export async function runDownload(url, { onProgress } = {}) {
     const downloadFilePath = await ffmpeg.remuxForDownloadAsync(download.filePath, metadata.codecName);
     emit('remux_done');
 
+    let savedPath = null;
+    if (destination) {
+      emit('save_start');
+      const ext = path.extname(downloadFilePath).slice(1) || 'm4a';
+      const absoluteSavedPath = await libraryStore.saveToLibraryAsync(
+        downloadFilePath,
+        destination.subfolder,
+        destination.fileNameBase || download.title,
+        ext
+      );
+      savedPath = path.relative(config.libraryRoot, absoluteSavedPath);
+      emit('save_done');
+    }
+
     downloadStore.set(
       info.id,
       DOWNLOAD_VARIANT_ID,
@@ -57,6 +79,7 @@ export async function runDownload(url, { onProgress } = {}) {
       uploader: download.uploader,
       cookieInvalid: download.cookieInvalid,
       downloadUrl: `/api/download/${info.id}/${DOWNLOAD_VARIANT_ID}`,
+      savedPath,
     };
   } catch (err) {
     await ytDlp.cleanupTempFile(download.filePath);
