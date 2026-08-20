@@ -16,6 +16,10 @@ const publicDir = path.join(__dirname, '..', 'public');
 const app = express();
 app.use(express.json({ limit: '10mb' })); // session reports carry full spectrum arrays per track
 app.use(express.static(publicDir));
+// Explicit route (not just relying on being a publicDir subfolder) so
+// SPECTROGRAM_DIR can point outside publicDir — needed for the packaged
+// Windows build, where publicDir resolves inside pkg's read-only snapshot.
+app.use('/spectrograms', express.static(config.spectrogramDir));
 
 function validateUrl(url) {
   return typeof url === 'string' && url.trim().length > 0;

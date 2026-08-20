@@ -3,6 +3,7 @@ import path from 'node:path';
 export const config = {
   cookiesDir: process.env.COOKIES_DIR || path.join(process.cwd(), 'data', 'auth'),
   libraryRoot: process.env.LIBRARY_ROOT || path.join(process.cwd(), 'data', 'library'),
+  spectrogramDir: process.env.SPECTROGRAM_DIR || path.join(process.cwd(), 'public', 'spectrograms'),
   ytDlpPath: process.env.YTDLP_PATH || 'yt-dlp',
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
