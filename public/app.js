@@ -31,6 +31,7 @@ const downloadUrlBtn = document.getElementById('downloadUrlBtn');
 const downloadUrlBtnLabel = document.getElementById('downloadUrlBtnLabel');
 const downloadErrorHint = document.getElementById('downloadErrorHint');
 
+const downloadFormatSelect = document.getElementById('downloadFormatSelect');
 const librarySubfolderInput = document.getElementById('librarySubfolderInput');
 const useAggregatingFolderCheckbox = document.getElementById('useAggregatingFolderCheckbox');
 const useTrackNumberCheckbox = document.getElementById('useTrackNumberCheckbox');
@@ -65,6 +66,7 @@ const DOWNLOAD_STAGE_LABELS = {
   info_start: 'Buscando informações da faixa',
   download_start: 'Baixando áudio',
   remux_start: 'Preparando arquivo',
+  transcode_start: 'Transcodificando para AAC',
   save_start: 'Salvando na biblioteca',
 };
 
@@ -702,12 +704,13 @@ function computeDestination(entry, index, entries, playlistTitle) {
  * no spectrogram/FFT). Resolves with the result on 'done', rejects with an
  * Error carrying .title/.detail on 'error'. Mirrors analyzeTrack().
  */
-function downloadTrack(url, destination, { onStage } = {}) {
+function downloadTrack(url, destination, format, { onStage } = {}) {
   return new Promise((resolve, reject) => {
     const params = new URLSearchParams({
       url,
       subfolder: destination.subfolder,
       fileNameBase: destination.fileNameBase,
+      format,
     });
     const source = new EventSource(`/api/download-track/stream?${params.toString()}`);
 
@@ -749,6 +752,8 @@ async function downloadTracks(entries, playlistTitle) {
   downloadErrorHint.textContent = '';
   setDownloadBusy(true);
 
+  const format = downloadFormatSelect.value;
+
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const prefix = entries.length > 1 ? `[${i + 1}/${entries.length}] ${entry.title} — ` : '';
@@ -756,7 +761,7 @@ async function downloadTracks(entries, playlistTitle) {
     const destination = computeDestination(entry, i, entries, playlistTitle);
 
     try {
-      const data = await downloadTrack(entry.url, destination, {
+      const data = await downloadTrack(entry.url, destination, format, {
         onStage: (label) => {
           setStatus('loading', `${prefix}${label}`);
           rowRefs.statusEl.textContent = label;

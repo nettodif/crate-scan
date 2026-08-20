@@ -279,7 +279,8 @@ body {
 
 /* ---------- Organize (library destination, Baixar mode) ---------- */
 
-.panel--organize #librarySubfolderInput {
+.panel--organize #librarySubfolderInput,
+.panel--organize #downloadFormatSelect {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -292,8 +293,13 @@ body {
   transition: border-color 0.15s ease;
 }
 
-.panel--organize #librarySubfolderInput:focus {
+.panel--organize #librarySubfolderInput:focus,
+.panel--organize #downloadFormatSelect:focus {
   border-color: var(--phosphor-dim);
+}
+
+.panel--organize #librarySubfolderInput {
+  margin-top: 18px;
 }
 
 .organize__toggles {

@@ -106,6 +106,13 @@
       </section>
 
       <section class="panel panel--organize">
+        <label for="downloadFormatSelect" class="panel__label">Formato de download</label>
+        <select id="downloadFormatSelect">
+          <option value="opus" selected>Opus (nativo, geralmente melhor qualidade)</option>
+          <option value="aac_native">AAC nativo</option>
+          <option value="aac_transcoded">AAC transcodificado</option>
+        </select>
+
         <label for="librarySubfolderInput" class="panel__label">Subpasta na biblioteca (opcional)</label>
         <input
           type="text"

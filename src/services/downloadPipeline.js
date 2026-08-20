@@ -1,9 +1,16 @@
 import path from 'node:path';
 import { config } from '../config.js';
 import * as ytDlp from './ytDlpService.js';
+import { FORMAT_SELECTORS } from './ytDlpService.js';
 import * as ffmpeg from './ffmpegService.js';
 import * as downloadStore from './downloadStore.js';
 import * as libraryStore from './libraryStore.js';
+
+const FORMAT_LABELS = {
+  opus: 'Opus',
+  aac_native: 'AAC nativo',
+  aac_transcoded: 'AAC transcodificado',
+};
 
 // Distinct from any variantId analysisPipeline.js ever uses ('native',
 // 'aac_native', 'aac_transcoded') so a download-only run never collides with
@@ -20,11 +27,18 @@ const DOWNLOAD_VARIANT_ID = 'download';
  *
  * destination ({ subfolder, fileNameBase }) is always saved into the library
  * (config.libraryRoot) — subfolder '' just means the library's root. The
- * original temp file is still kept in downloadStore afterward so the manual
- * "baixar novamente" link keeps working as a fallback alongside the copy
- * that landed in the library.
+ * final file is still kept in downloadStore afterward so the manual "baixar
+ * novamente" link keeps working as a fallback alongside the copy that landed
+ * in the library.
+ *
+ * format picks between 'opus'/'aac_native' (downloaded directly in that
+ * codec — best-effort, throws a clear 422 if the video doesn't offer it) and
+ * 'aac_transcoded' (always downloads native, then re-encodes to AAC locally
+ * — real generation loss, but never unavailable). Mirrors the 3 variants
+ * analysisPipeline.js already compares side by side, but here the user picks
+ * one upfront instead of getting all of them.
  */
-export async function runDownload(url, { onProgress, destination } = {}) {
+export async function runDownload(url, { onProgress, destination, format = 'opus' } = {}) {
   const emit = (stage, data) => onProgress?.(stage, data);
 
   emit('info_start');
@@ -39,25 +53,49 @@ export async function runDownload(url, { onProgress, destination } = {}) {
   emit('download_start');
   let download;
   try {
-    download = await ytDlp.downloadAsync(url, info, {
-      onProgress: (p) => emit('download_progress', p),
-    });
+    if (format === 'aac_transcoded') {
+      download = await ytDlp.downloadAsync(url, info, {
+        onProgress: (p) => emit('download_progress', p),
+      });
+    } else {
+      download = await ytDlp.downloadVariantAsync(url, info, FORMAT_SELECTORS[format], {
+        onProgress: (p) => emit('download_progress', p),
+      });
+      if (!download) {
+        throw taggedError(
+          new Error(`Formato "${FORMAT_LABELS[format]}" não disponível para essa faixa — tente outro formato.`),
+          422,
+          'Formato indisponível'
+        );
+      }
+    }
   } catch (err) {
     throw taggedError(err, 502, 'Falha ao baixar o áudio');
   }
 
+  const cleanupCandidates = [download.filePath];
+
   try {
-    emit('remux_start');
-    const metadata = await ffmpeg.getMetadataAsync(download.filePath);
-    const downloadFilePath = await ffmpeg.remuxForDownloadAsync(download.filePath, metadata.codecName);
-    emit('remux_done');
+    let finalFilePath;
+    if (format === 'aac_transcoded') {
+      emit('transcode_start');
+      const outputDir = await ytDlp.createTempJobDirAsync();
+      finalFilePath = await ffmpeg.transcodeToAacAsync(download.filePath, outputDir);
+      cleanupCandidates.push(finalFilePath);
+      emit('transcode_done');
+    } else {
+      emit('remux_start');
+      const metadata = await ffmpeg.getMetadataAsync(download.filePath);
+      finalFilePath = await ffmpeg.remuxForDownloadAsync(download.filePath, metadata.codecName);
+      emit('remux_done');
+    }
 
     let savedPath = null;
     if (destination) {
       emit('save_start');
-      const ext = path.extname(downloadFilePath).slice(1) || 'm4a';
+      const ext = path.extname(finalFilePath).slice(1) || 'm4a';
       const absoluteSavedPath = await libraryStore.saveToLibraryAsync(
-        downloadFilePath,
+        finalFilePath,
         destination.subfolder,
         destination.fileNameBase || download.title,
         ext
@@ -66,11 +104,19 @@ export async function runDownload(url, { onProgress, destination } = {}) {
       emit('save_done');
     }
 
+    // Only finalFilePath needs to survive going forward (downloadStore keeps
+    // it alive for the manual re-download link) — the original native temp
+    // file is a separate dir only in the aac_transcoded case, so discard it
+    // now instead of leaking it past this function's lifetime.
+    if (finalFilePath !== download.filePath) {
+      await ytDlp.cleanupTempFile(download.filePath);
+    }
+
     downloadStore.set(
       info.id,
       DOWNLOAD_VARIANT_ID,
-      downloadFilePath,
-      buildDownloadFileName(download.title, downloadFilePath)
+      finalFilePath,
+      buildDownloadFileName(download.title, finalFilePath)
     );
 
     return {
@@ -82,7 +128,7 @@ export async function runDownload(url, { onProgress, destination } = {}) {
       savedPath,
     };
   } catch (err) {
-    await ytDlp.cleanupTempFile(download.filePath);
+    await Promise.all(cleanupCandidates.map((fp) => ytDlp.cleanupTempFile(fp)));
     throw taggedError(err, 500, 'Falha ao preparar o áudio para download');
   }
 }

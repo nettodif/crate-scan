@@ -19,6 +19,16 @@ const tempRoot = path.join(os.tmpdir(), 'cratescan');
 // first use, which --remote-components ejs:github enables.
 const JS_RUNTIME_ARGS = ['--js-runtimes', `node:${process.execPath}`, '--remote-components', 'ejs:github'];
 
+// Codec-targeted yt-dlp format selectors, shared by analysisPipeline.js (which
+// compares variants side by side) and downloadPipeline.js (which lets the user
+// pick one explicitly before downloading). Passed to downloadVariantAsync,
+// which returns null instead of throwing when a video simply doesn't offer
+// that codec, so callers can treat "unavailable" as a normal outcome.
+export const FORMAT_SELECTORS = {
+  opus: 'bestaudio[acodec^=opus]/bestaudio[acodec^=vorbis]',
+  aac_native: 'bestaudio[acodec^=mp4a]/bestaudio[acodec^=aac]',
+};
+
 /**
  * Downloads the best available audio stream (no re-encoding) for the given URL
  * and returns the local file path plus basic metadata.

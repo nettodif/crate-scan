@@ -1,5 +1,6 @@
 import path from 'node:path';
 import * as ytDlp from './ytDlpService.js';
+import { FORMAT_SELECTORS } from './ytDlpService.js';
 import * as ffmpeg from './ffmpegService.js';
 import * as spectrumAnalyzer from './spectrumAnalyzer.js';
 import * as structureAnalyzer from './structureAnalyzer.js';
@@ -10,8 +11,6 @@ import * as downloadStore from './downloadStore.js';
 // formats YouTube's "bestaudio" most commonly resolves to), which is the whole
 // reason the extra AAC variants below exist.
 const REKORDBOX_COMPATIBLE_CODECS = new Set(['aac', 'mp3', 'flac', 'wav', 'pcm_s16le', 'pcm_s24le']);
-
-const AAC_NATIVE_FORMAT_SELECTOR = 'bestaudio[acodec^=mp4a]/bestaudio[acodec^=aac]';
 
 /**
  * Runs the full download + analysis pipeline for a URL, emitting stage events
@@ -226,7 +225,7 @@ export async function runAnalysis(url, { onProgress } = {}) {
 
 async function fetchAacNativeVariant(url, info, emit) {
   emit('variant_fetch_start', { variantId: 'aac_native' });
-  const download = await ytDlp.downloadVariantAsync(url, info, AAC_NATIVE_FORMAT_SELECTOR);
+  const download = await ytDlp.downloadVariantAsync(url, info, FORMAT_SELECTORS.aac_native);
   emit('variant_fetch_done', { variantId: 'aac_native', available: Boolean(download) });
   return download;
 }

@@ -21,6 +21,8 @@ function validateUrl(url) {
   return typeof url === 'string' && url.trim().length > 0;
 }
 
+const DOWNLOAD_FORMATS = new Set(['opus', 'aac_native', 'aac_transcoded']);
+
 app.post('/api/analyze', async (req, res) => {
   const url = req.body?.url;
   if (!validateUrl(url)) {
@@ -112,11 +114,13 @@ app.get('/api/download-track/stream', async (req, res) => {
 
   const subfolder = typeof req.query?.subfolder === 'string' ? req.query.subfolder : '';
   const fileNameBase = typeof req.query?.fileNameBase === 'string' ? req.query.fileNameBase : '';
+  const format = DOWNLOAD_FORMATS.has(req.query?.format) ? req.query.format : 'opus';
 
   try {
     const result = await runDownload(url, {
       onProgress: (stage, data) => send(stage, data),
       destination: { subfolder, fileNameBase },
+      format,
     });
     send('done', result);
   } catch (err) {
