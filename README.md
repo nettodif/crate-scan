@@ -1,12 +1,19 @@
 # CrateScan
 
-Pré-análise de qualidade de áudio para faixas do YouTube, YouTube Music e SoundCloud,
-inspirado no carregamento de faixas no rekordbox: baixa o áudio, extrai metadados técnicos
-(codec, bitrate, sample rate) e gera um espectrograma + um "corte espectral estimado" que
-ajuda a identificar faixas transcodificadas ou de baixo bitrate mesmo quando o bitrate
-declarado parece bom.
+Ferramenta pra YouTube, YouTube Music e SoundCloud com dois modos, numa aba no topo da UI:
 
-## Como funciona
+- **Analisar**: pré-análise de qualidade de áudio inspirada no carregamento de faixas no
+  rekordbox — baixa o áudio, extrai metadados técnicos (codec, bitrate, sample rate) e
+  gera um espectrograma + um "corte espectral estimado" que ajuda a identificar faixas
+  transcodificadas ou de baixo bitrate mesmo quando o bitrate declarado parece bom.
+- **Baixar**: pula a análise e baixa direto (faixa, álbum ou playlist), no formato que
+  você escolher (Opus, AAC nativo ou AAC transcodificado), já organizado numa biblioteca
+  local (subpasta, pasta por playlist/álbum, faixas numeradas).
+
+Também dá pra rodar como app Windows standalone (`.exe`), sem precisar instalar nada — ver
+a seção própria mais abaixo.
+
+## Como funciona (modo Analisar)
 
 1. **Download**: `yt-dlp` baixa o melhor stream de áudio nativo disponível (sem reencodar).
 2. **Metadados**: `ffprobe` lê codec, bitrate declarado, sample rate, canais e duração.
@@ -190,6 +197,19 @@ YTDLP_COOKIES_HOST_PATH=/caminho/no/host/cookies.txt YTDLP_COOKIES_FILE=/app/coo
   docker compose up --build
 ```
 
+## Rodando como app Windows (`.exe` standalone)
+
+Pra quem não quer lidar com Node/ffmpeg/yt-dlp nem Docker: `packaging/windows/` empacota
+tudo isso num único `CrateScan.exe` (via [`pkg`](https://github.com/yao-pkg/pkg)) — a
+mesma UI web de sempre, só que instalada como um app Windows comum, sem precisar instalar
+nada manualmente. Dados (cookies, biblioteca, cache de espectrogramas) ficam em
+`%APPDATA%\CrateScan`/`Documentos\CrateScan`, fora da pasta de instalação.
+
+Gerar o `.exe`/instalador não precisa necessariamente de uma máquina Windows — veja
+[`packaging/windows/README.md`](packaging/windows/README.md) pras três formas de build
+(local direto, via Docker só pro `.exe`, ou via GitHub Actions pro pipeline completo
+incluindo o instalador Inno Setup).
+
 ## Estrutura do projeto
 
 ```
@@ -202,7 +222,7 @@ create-scan/
       ffmpegService.js            # metadados + espectrograma + decodificação PCM + remux
       spectrumAnalyzer.js         # FFT e heurística de corte espectral
       analysisPipeline.js         # orquestra download → metadados → espectro → veredito
-      downloadPipeline.js         # modo "Baixar": só download + remux, sem análise
+      downloadPipeline.js         # modo "Baixar": só download + remux/transcode, sem análise
       analysisCache.js            # cache em memória por videoId (TTL 1h)
       downloadStore.js            # mantém o áudio baixado disponível pra download local
       libraryStore.js             # copia o download final pra dentro de LIBRARY_ROOT, organizado
@@ -211,6 +231,10 @@ create-scan/
       processRunner.js            # helper para rodar processos externos
   public/
     index.html / styles.css / app.js   # frontend (HTML/CSS/JS puro, sem build step)
+  packaging/
+    windows/                     # empacotamento como .exe standalone (ver seção própria abaixo)
+  .github/workflows/
+    build-windows.yml            # CI que gera o .exe + instalador Windows sob demanda
 ```
 
 ## Funcionalidades
@@ -230,12 +254,19 @@ create-scan/
   (`GET /api/download/:id`), remuxada pra uma extensão compatível com o codec real (sem
   reencode) — ver seção de cookies acima pra qualidade mais alta.
 - **Modo "Baixar" (aba separada da análise)**: cole uma URL de faixa, álbum ou playlist e
-  baixe o áudio nativo direto, sem rodar espectrograma/FFT. Cada faixa baixada é
-  automaticamente copiada pra dentro da biblioteca local organizada (pasta configurada via
-  `LIBRARY_ROOT`, padrão `data/library`) — dá pra definir uma subpasta de destino, ligar
-  uma pasta agregadora com o nome da playlist/álbum e numerar as faixas na ordem original
-  (`01 - `, `02 - `, ...). O link "Baixar novamente" (`GET /api/download-track/stream`)
-  continua disponível como reserva além da cópia salva na biblioteca.
+  baixe o áudio direto, sem rodar espectrograma/FFT. Cada faixa baixada é automaticamente
+  copiada pra dentro da biblioteca local organizada (pasta configurada via `LIBRARY_ROOT`,
+  padrão `data/library`) — dá pra definir uma subpasta de destino, ligar uma pasta
+  agregadora com o nome da playlist/álbum e numerar as faixas na ordem original (`01 - `,
+  `02 - `, ...). O link "Baixar novamente" (`GET /api/download-track/stream`) continua
+  disponível como reserva além da cópia salva na biblioteca.
+- **Escolha de formato no modo "Baixar"**: um seletor deixa escolher entre **Opus**
+  (nativo, geralmente melhor qualidade — padrão), **AAC nativo** (quando o YouTube oferece
+  um stream AAC pra aquele vídeo) ou **AAC transcodificado** (baixa o áudio nativo e
+  reencoda localmente via `ffmpeg`, útil quando nem Opus nem AAC nativo servem). Opus/AAC
+  nativo são "melhor esforço" — se o yt-dlp não encontrar esse codec pra uma faixa
+  específica, o download falha com um erro claro em vez de trocar de formato
+  silenciosamente.
 - **Cache de análise**: resultado fica em memória por `videoId` (TTL 1h); "Limpar cache" na
   UI invalida uma faixa específica ou tudo, útil depois de configurar/trocar um cookie.
 - **Exportar relatório**: `POST /api/report?format=csv|pdf`, body `{ sessions: [...] }` com
