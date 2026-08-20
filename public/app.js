@@ -21,6 +21,25 @@ const cookiesStatus = document.getElementById('cookiesStatus');
 const cookiesClearBtn = document.getElementById('cookiesClearBtn');
 const clearCacheBtn = document.getElementById('clearCacheBtn');
 
+const analyzeModeTab = document.getElementById('analyzeModeTab');
+const downloadModeTab = document.getElementById('downloadModeTab');
+const analyzeMode = document.getElementById('analyzeMode');
+const downloadMode = document.getElementById('downloadMode');
+
+const downloadUrlInput = document.getElementById('downloadUrlInput');
+const downloadUrlBtn = document.getElementById('downloadUrlBtn');
+const downloadUrlBtnLabel = document.getElementById('downloadUrlBtnLabel');
+const downloadErrorHint = document.getElementById('downloadErrorHint');
+
+const downloadPlaylistPanel = document.getElementById('downloadPlaylistPanel');
+const downloadPlaylistList = document.getElementById('downloadPlaylistList');
+const downloadPlaylistCount = document.getElementById('downloadPlaylistCount');
+const downloadSelectAllCheckbox = document.getElementById('downloadSelectAllCheckbox');
+const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
+
+const downloadLogPanel = document.getElementById('downloadLogPanel');
+const downloadLogList = document.getElementById('downloadLogList');
+
 const FREQ_TICKS_HZ = [0, 5000, 10000, 15000, 20000];
 
 const LEVEL_LABELS = {
@@ -36,6 +55,12 @@ const STAGE_LABELS = {
   metadata_start: 'Lendo metadados',
   structure_start: 'Detectando estrutura da faixa',
   cached: 'Encontrado em cache',
+};
+
+const DOWNLOAD_STAGE_LABELS = {
+  info_start: 'Buscando informações da faixa',
+  download_start: 'Baixando áudio',
+  remux_start: 'Preparando arquivo',
 };
 
 // Per-variant stages: fired once per variant (native, and — when the native
@@ -441,10 +466,14 @@ function renderErrorCard(title, message) {
   resultsPanel.hidden = false;
 }
 
-function renderPlaylist(entries) {
-  playlistList.innerHTML = '';
-  playlistCount.textContent = `Playlist detectada — ${entries.length} faixas`;
-  selectAllCheckbox.checked = true;
+/**
+ * Shared by both modes (Analisar / Baixar) — each has its own list/count/panel
+ * elements, so the target DOM refs are passed in rather than hardcoded.
+ */
+function renderPlaylistInto({ listEl, countEl, selectAllEl, panelEl }, entries) {
+  listEl.innerHTML = '';
+  countEl.textContent = `Playlist detectada — ${entries.length} faixas`;
+  selectAllEl.checked = true;
 
   entries.forEach((entry, index) => {
     const row = document.createElement('label');
@@ -467,10 +496,29 @@ function renderPlaylist(entries) {
     row.appendChild(checkbox);
     row.appendChild(indexSpan);
     row.appendChild(titleSpan);
-    playlistList.appendChild(row);
+    listEl.appendChild(row);
   });
 
-  playlistPanel.hidden = false;
+  panelEl.hidden = false;
+}
+
+function renderPlaylist(entries) {
+  renderPlaylistInto(
+    { listEl: playlistList, countEl: playlistCount, selectAllEl: selectAllCheckbox, panelEl: playlistPanel },
+    entries
+  );
+}
+
+function renderDownloadPlaylist(entries) {
+  renderPlaylistInto(
+    {
+      listEl: downloadPlaylistList,
+      countEl: downloadPlaylistCount,
+      selectAllEl: downloadSelectAllCheckbox,
+      panelEl: downloadPlaylistPanel,
+    },
+    entries
+  );
 }
 
 async function analyze() {
@@ -539,6 +587,206 @@ async function analyzeTracks(entries) {
   }
 
   setBusy(false, 'Análise concluída');
+}
+
+function setActiveMode(mode) {
+  analyzeModeTab.classList.toggle('mode-tab--active', mode === 'analyze');
+  downloadModeTab.classList.toggle('mode-tab--active', mode === 'download');
+  analyzeMode.hidden = mode !== 'analyze';
+  downloadMode.hidden = mode !== 'download';
+}
+
+function setDownloadBusy(isBusy, label) {
+  downloadUrlBtn.disabled = isBusy;
+  downloadSelectedBtn.disabled = isBusy;
+  downloadUrlBtnLabel.textContent = isBusy ? (label || 'Baixando…') : 'Baixar';
+  setStatus(isBusy ? 'loading' : 'ok', label || (isBusy ? 'Baixando…' : 'Pronto'));
+}
+
+function setDownloadBusyError(label) {
+  downloadUrlBtn.disabled = false;
+  downloadSelectedBtn.disabled = false;
+  downloadUrlBtnLabel.textContent = 'Baixar';
+  setStatus('error', label);
+}
+
+function resetDownloadState() {
+  downloadLogList.innerHTML = '';
+  downloadLogPanel.hidden = true;
+  downloadPlaylistList.innerHTML = '';
+  downloadPlaylistPanel.hidden = true;
+}
+
+function renderDownloadLogRow(title) {
+  const row = document.createElement('div');
+  row.className = 'download-log__item';
+  row.dataset.state = 'progress';
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'download-log__title';
+  titleEl.textContent = title || 'Faixa sem título';
+
+  const statusEl = document.createElement('div');
+  statusEl.className = 'download-log__status';
+  statusEl.textContent = 'Na fila…';
+
+  row.appendChild(titleEl);
+  row.appendChild(statusEl);
+  downloadLogList.appendChild(row);
+  downloadLogPanel.hidden = false;
+
+  return { row, statusEl };
+}
+
+function markDownloadRowDone({ row, statusEl }, downloadUrl, cookieInvalid) {
+  row.dataset.state = 'done';
+  statusEl.textContent = '';
+
+  if (cookieInvalid) {
+    const warning = document.createElement('span');
+    warning.className = 'download-log__warning';
+    warning.textContent = 'Cookie inválido — baixado sem autenticação. ';
+    statusEl.appendChild(warning);
+  }
+
+  statusEl.appendChild(document.createTextNode('Concluído — '));
+
+  const link = document.createElement('a');
+  link.className = 'btn btn--download';
+  link.href = downloadUrl;
+  link.download = '';
+  link.textContent = 'Baixar novamente';
+  statusEl.appendChild(link);
+}
+
+function markDownloadRowError({ row, statusEl }, message) {
+  row.dataset.state = 'error';
+  statusEl.textContent = message;
+}
+
+function triggerBrowserDownload(downloadUrl) {
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = '';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+/**
+ * Runs the single-track SSE download-only flow for one URL (no analysis —
+ * no spectrogram/FFT). Resolves with the result on 'done', rejects with an
+ * Error carrying .title/.detail on 'error'. Mirrors analyzeTrack().
+ */
+function downloadTrack(url, { onStage } = {}) {
+  return new Promise((resolve, reject) => {
+    const source = new EventSource(`/api/download-track/stream?url=${encodeURIComponent(url)}`);
+
+    for (const stage of Object.keys(DOWNLOAD_STAGE_LABELS)) {
+      source.addEventListener(stage, () => onStage?.(DOWNLOAD_STAGE_LABELS[stage]));
+    }
+
+    source.addEventListener('download_progress', (e) => {
+      const { percent } = JSON.parse(e.data);
+      if (typeof percent === 'number') onStage?.(`Baixando áudio (${percent.toFixed(0)}%)`);
+    });
+
+    source.addEventListener('done', (e) => {
+      source.close();
+      resolve(JSON.parse(e.data));
+    });
+
+    source.addEventListener('error', (e) => {
+      source.close();
+      let message = 'Falha inesperada ao baixar a faixa.';
+      let title = 'Falha no download';
+      if (e.data) {
+        try {
+          const problem = JSON.parse(e.data);
+          message = problem.detail || problem.title || message;
+          title = problem.title || title;
+        } catch {
+          // not a JSON payload from our own 'error' event — likely a connection-level error
+        }
+      }
+      const err = new Error(message);
+      err.title = title;
+      reject(err);
+    });
+  });
+}
+
+async function downloadTracks(entries) {
+  downloadErrorHint.textContent = '';
+  setDownloadBusy(true);
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const prefix = entries.length > 1 ? `[${i + 1}/${entries.length}] ${entry.title} — ` : '';
+    const rowRefs = renderDownloadLogRow(entry.title);
+
+    try {
+      const data = await downloadTrack(entry.url, {
+        onStage: (label) => {
+          setStatus('loading', `${prefix}${label}`);
+          rowRefs.statusEl.textContent = label;
+        },
+      });
+      markDownloadRowDone(rowRefs, data.downloadUrl, data.cookieInvalid);
+      triggerBrowserDownload(data.downloadUrl);
+    } catch (err) {
+      console.error(`Falha ao baixar "${entry.title}"`, err);
+      markDownloadRowError(rowRefs, err.message);
+    }
+  }
+
+  setDownloadBusy(false, 'Download concluído');
+}
+
+async function startDownload() {
+  const url = downloadUrlInput.value.trim();
+  downloadErrorHint.textContent = '';
+
+  if (!url) {
+    downloadErrorHint.textContent = 'Cole uma URL do YouTube, YouTube Music ou SoundCloud antes de baixar.';
+    return;
+  }
+
+  resetDownloadState();
+  setDownloadBusy(true, 'Buscando faixas…');
+
+  let entries;
+  try {
+    const res = await fetch(`/api/playlist/entries?url=${encodeURIComponent(url)}`);
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || body.error || 'Falha ao listar faixas.');
+    entries = body.entries;
+  } catch (err) {
+    downloadErrorHint.textContent = err.message;
+    setDownloadBusyError('Falha ao listar faixas');
+    return;
+  }
+
+  if (entries.length > 1) {
+    renderDownloadPlaylist(entries);
+    setDownloadBusy(false, `Playlist com ${entries.length} faixas — selecione o que baixar`);
+    return;
+  }
+
+  await downloadTracks([entries[0]]);
+}
+
+async function downloadSelected() {
+  const checked = Array.from(downloadPlaylistList.querySelectorAll('input[type="checkbox"]:checked'));
+  if (checked.length === 0) {
+    downloadErrorHint.textContent = 'Selecione ao menos uma faixa da playlist.';
+    return;
+  }
+
+  const entries = checked.map((c) => ({ url: c.dataset.url, title: c.dataset.title }));
+  downloadLogList.innerHTML = '';
+  downloadLogPanel.hidden = true;
+  await downloadTracks(entries);
 }
 
 function updateCookiesStatus(hasCookies, label) {
@@ -635,5 +883,21 @@ cookiesFileInput.addEventListener('change', () => {
 });
 cookiesClearBtn.addEventListener('click', clearCookies);
 clearCacheBtn.addEventListener('click', clearAllCache);
+
+analyzeModeTab.addEventListener('click', () => setActiveMode('analyze'));
+downloadModeTab.addEventListener('click', () => setActiveMode('download'));
+
+downloadUrlBtn.addEventListener('click', startDownload);
+downloadUrlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') startDownload();
+});
+
+downloadSelectedBtn.addEventListener('click', downloadSelected);
+
+downloadSelectAllCheckbox.addEventListener('change', () => {
+  downloadPlaylistList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.checked = downloadSelectAllCheckbox.checked;
+  });
+});
 
 refreshCookiesStatus();

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { runAnalysis } from './services/analysisPipeline.js';
+import { runDownload } from './services/downloadPipeline.js';
 import * as ytDlp from './services/ytDlpService.js';
 import * as reportGenerator from './services/reportGenerator.js';
 import * as downloadStore from './services/downloadStore.js';
@@ -83,6 +84,40 @@ app.get('/api/analyze/stream', async (req, res) => {
   } catch (err) {
     console.error('Falha na análise (stream)', err);
     send('error', { title: err.title ?? 'Falha ao analisar o áudio', detail: err.message });
+  } finally {
+    res.end();
+  }
+});
+
+// Download-only SSE variant: downloads and remuxes the native best-audio stream
+// without running any analysis (no ffprobe cross-checks, no spectrogram, no
+// FFT) — for users who just want the file to organize locally. Same SSE shape
+// as /api/analyze/stream so the client can reuse its EventSource handling.
+app.get('/api/download-track/stream', async (req, res) => {
+  const url = req.query?.url;
+  if (!validateUrl(url)) {
+    res.status(400).json({ error: 'Informe uma URL do YouTube, YouTube Music ou SoundCloud.' });
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
+  };
+
+  try {
+    const result = await runDownload(url, {
+      onProgress: (stage, data) => send(stage, data),
+    });
+    send('done', result);
+  } catch (err) {
+    console.error('Falha ao baixar faixa (stream)', err);
+    send('error', { title: err.title ?? 'Falha ao baixar o áudio', detail: err.message });
   } finally {
     res.end();
   }

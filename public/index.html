@@ -25,6 +25,11 @@
       </div>
     </header>
 
+    <nav class="mode-tabs">
+      <button type="button" class="mode-tab mode-tab--active" id="analyzeModeTab" data-mode="analyze">Analisar</button>
+      <button type="button" class="mode-tab" id="downloadModeTab" data-mode="download">Baixar</button>
+    </nav>
+
     <section class="panel panel--auth">
       <div class="auth__row">
         <label class="btn btn--download auth__upload-btn">
@@ -44,39 +49,77 @@
       </p>
     </section>
 
-    <section class="panel panel--input">
-      <label for="urlInput" class="panel__label">URL da faixa ou playlist</label>
-      <div class="input-row">
-        <input
-          type="text"
-          id="urlInput"
-          placeholder="https://music.youtube.com/watch?v=... ou https://soundcloud.com/artista/faixa"
-          autocomplete="off"
-        />
-        <button id="analyzeBtn" class="btn btn--primary">
-          <span id="analyzeBtnLabel">Analisar</span>
-        </button>
-      </div>
-      <p class="panel__hint panel__hint--muted panel__hint--info">
-        YouTube · YouTube Music · SoundCloud — faixa única ou playlist
-      </p>
-      <p class="panel__hint" id="errorHint"></p>
-    </section>
+    <div class="mode-panel" id="analyzeMode">
+      <section class="panel panel--input">
+        <label for="urlInput" class="panel__label">URL da faixa ou playlist</label>
+        <div class="input-row">
+          <input
+            type="text"
+            id="urlInput"
+            placeholder="https://music.youtube.com/watch?v=... ou https://soundcloud.com/artista/faixa"
+            autocomplete="off"
+          />
+          <button id="analyzeBtn" class="btn btn--primary">
+            <span id="analyzeBtnLabel">Analisar</span>
+          </button>
+        </div>
+        <p class="panel__hint panel__hint--muted panel__hint--info">
+          YouTube · YouTube Music · SoundCloud — faixa única ou playlist
+        </p>
+        <p class="panel__hint" id="errorHint"></p>
+      </section>
 
-    <section class="panel panel--playlist" id="playlistPanel" hidden>
-      <div class="playlist__header">
-        <label class="playlist__select-all">
-          <input type="checkbox" id="selectAllCheckbox" checked />
-          <span id="playlistCount">Playlist detectada</span>
-        </label>
-        <button id="analyzeSelectedBtn" class="btn btn--primary">Analisar selecionadas</button>
-      </div>
-      <div class="playlist__list" id="playlistList"></div>
-    </section>
+      <section class="panel panel--playlist" id="playlistPanel" hidden>
+        <div class="playlist__header">
+          <label class="playlist__select-all">
+            <input type="checkbox" id="selectAllCheckbox" checked />
+            <span id="playlistCount">Playlist detectada</span>
+          </label>
+          <button id="analyzeSelectedBtn" class="btn btn--primary">Analisar selecionadas</button>
+        </div>
+        <div class="playlist__list" id="playlistList"></div>
+      </section>
 
-    <section class="panel panel--results" id="resultsPanel" hidden>
-      <div id="resultsList"></div>
-    </section>
+      <section class="panel panel--results" id="resultsPanel" hidden>
+        <div id="resultsList"></div>
+      </section>
+    </div>
+
+    <div class="mode-panel" id="downloadMode" hidden>
+      <section class="panel panel--input">
+        <label for="downloadUrlInput" class="panel__label">URL da faixa, álbum ou playlist</label>
+        <div class="input-row">
+          <input
+            type="text"
+            id="downloadUrlInput"
+            placeholder="https://music.youtube.com/watch?v=... ou https://soundcloud.com/artista/faixa"
+            autocomplete="off"
+          />
+          <button id="downloadUrlBtn" class="btn btn--primary">
+            <span id="downloadUrlBtnLabel">Baixar</span>
+          </button>
+        </div>
+        <p class="panel__hint panel__hint--muted panel__hint--info">
+          YouTube · YouTube Music · SoundCloud — baixa o áudio nativo direto, sem analisar
+        </p>
+        <p class="panel__hint" id="downloadErrorHint"></p>
+      </section>
+
+      <section class="panel panel--playlist" id="downloadPlaylistPanel" hidden>
+        <div class="playlist__header">
+          <label class="playlist__select-all">
+            <input type="checkbox" id="downloadSelectAllCheckbox" checked />
+            <span id="downloadPlaylistCount">Playlist detectada</span>
+          </label>
+          <button id="downloadSelectedBtn" class="btn btn--primary">Baixar selecionadas</button>
+        </div>
+        <div class="playlist__list" id="downloadPlaylistList"></div>
+      </section>
+
+      <section class="panel panel--download-log" id="downloadLogPanel" hidden>
+        <div id="downloadLogList"></div>
+      </section>
+    </div>
 
     <template id="trackCardTemplate">
       <article class="track-card">
