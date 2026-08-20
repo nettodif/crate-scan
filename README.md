@@ -99,6 +99,37 @@ instalar nada a mais. Se for rodar yt-dlp manualmente fora do app, adicione
 Com cookies válidos, o app já escolhe automaticamente o melhor formato disponível
 (`-f bestaudio/best`) — nenhuma configuração extra é necessária além do acima.
 
+### Cookie válido, mas download falha só em Docker
+
+Padrão específico: o upload do `cookies.txt` passa na validação normalmente, mas uma
+análise/download real falha logo em seguida — só acontece rodando via Docker, não local.
+Hipótese mais provável: a validação do cookie (`--simulate --skip-download`) só lista
+metadados e pode nunca chegar a exercitar o "desafio n" de verdade — isso só acontece
+quando o yt-dlp precisa montar uma URL de mídia real pra baixar, então o componente
+auxiliar (EJS) que resolve esse desafio só é buscado do GitHub nesse momento, não durante
+a validação. Se a rede do container tiver qualquer restrição de saída (firewall, DNS,
+proxy) que não afete a validação (mais leve) mas afete esse fetch, o padrão bate
+exatamente com o relatado.
+
+O `Dockerfile` já tenta pré-buscar esse componente durante o build (quando a rede já está
+garantida, já que o próprio build baixa o binário do yt-dlp) — isso deve resolver a maior
+parte dos casos depois de um `docker compose up --build`. Se persistir mesmo assim, o erro
+que o app mostra agora já inclui uma dica de diagnóstico (`describeYtDlpFailure` em
+`ytDlpService.js` detecta padrões de falha de rede no stderr do yt-dlp). Pra confirmar de
+vez, capture a saída verbose de dentro do próprio container:
+
+```bash
+docker compose exec cratescan curl -v https://github.com
+docker compose exec cratescan yt-dlp -v --cookies /app/data/auth/cookies.txt \
+  --js-runtimes node:$(docker compose exec cratescan which node) \
+  --remote-components ejs:github <URL real que está falhando>
+```
+
+Se o `curl` falhar, é confirmadamente um problema de rede de saída do container/host
+(DNS, firewall, proxy) — fora do controle do app, precisa ser resolvido na configuração de
+rede do ambiente Docker. Se o `curl` funcionar mas o `yt-dlp -v` continuar falhando no
+mesmo ponto, a saída verbose completa é o próximo passo pra identificar exatamente onde.
+
 Se aparecer `HTTP Error 403: Forbidden` ao baixar uma faixa **sem** cookie configurado
 (diferente do erro acima — a listagem de formatos funciona, só a URL do arquivo de áudio
 em si é rejeitada), é o YouTube bloqueando acesso anônimo de forma inconsistente

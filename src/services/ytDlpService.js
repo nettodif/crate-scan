@@ -101,6 +101,15 @@ export async function validateCookiesAsync(cookiesPath) {
   throw new Error(`yt-dlp não conseguiu usar esse cookies.txt pra nenhum serviço suportado. Detalhe: ${detail}`);
 }
 
+// Symptoms of the container/host being unable to reach the network at all —
+// notably GitHub, needed to fetch the EJS challenge-solver component (see
+// JS_RUNTIME_ARGS above) the first time an authenticated download actually
+// needs to resolve a real media URL (unlike --simulate cookie validation,
+// which may never exercise that code path at all). Distinct from the
+// "Requested format is not available" / 403 cases below, which are about
+// YouTube rejecting the request, not the network being unreachable.
+const NETWORK_FAILURE_RE = /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|Temporary failure in name resolution|Name or service not known|Failed to resolve|Connection refused|Network is unreachable|Unable to download.*component/i;
+
 /**
  * "Requested format is not available" with no -f override (as in
  * fetchPlaylistEntriesAsync) means yt-dlp couldn't resolve ANY format for the
@@ -109,6 +118,14 @@ export async function validateCookiesAsync(cookiesPath) {
  * that instead of leaving the user to guess from the raw yt-dlp error.
  */
 function describeYtDlpFailure(stdErr) {
+  if (authArgs().length && NETWORK_FAILURE_RE.test(stdErr)) {
+    return `${stdErr}\n\nIsso parece uma falha de rede do próprio container/servidor (não do YouTube) — ` +
+      'com um cookie ativo, o yt-dlp pode precisar baixar um componente auxiliar do GitHub na primeira vez ' +
+      'que resolve uma URL de mídia de verdade, e essa é a exceção mais provável se o upload do cookie ' +
+      'funcionou mas o download real falha. Rodando via Docker, teste o acesso de dentro do container: ' +
+      '"docker compose exec cratescan curl -v https://github.com".';
+  }
+
   if (cookieStore.getPath() && stdErr.includes('Requested format is not available')) {
     return `${stdErr}\n\nIsso pode indicar que o cookie enviado expirou ou está inválido — tente exportar um cookies.txt novo.`;
   }
