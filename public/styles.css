@@ -190,7 +190,8 @@ body {
   gap: 10px;
 }
 
-#urlInput {
+#urlInput,
+#downloadUrlInput {
   flex: 1;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -203,7 +204,8 @@ body {
   transition: border-color 0.15s ease;
 }
 
-#urlInput:focus {
+#urlInput:focus,
+#downloadUrlInput:focus {
   border-color: var(--phosphor-dim);
 }
 
@@ -452,6 +454,39 @@ body {
 
 .download-log__warning {
   color: var(--amber);
+}
+
+.download-log__quality {
+  flex-basis: 100%;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.download-log__quality-badge {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.download-log__quality[data-level="high"] .download-log__quality-badge { color: var(--phosphor); }
+.download-log__quality[data-level="medium"] .download-log__quality-badge { color: var(--amber); }
+.download-log__quality[data-level="low"] .download-log__quality-badge { color: var(--red); }
+
+.download-log__quality-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.download-log__format-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 /* ---------- Results ---------- */

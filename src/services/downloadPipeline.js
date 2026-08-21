@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import * as ytDlp from './ytDlpService.js';
 import { FORMAT_SELECTORS } from './ytDlpService.js';
 import * as ffmpeg from './ffmpegService.js';
+import * as spectrumAnalyzer from './spectrumAnalyzer.js';
 import * as downloadStore from './downloadStore.js';
 import * as libraryStore from './libraryStore.js';
 
@@ -11,6 +12,20 @@ const FORMAT_LABELS = {
   aac_native: 'AAC nativo',
   aac_transcoded: 'AAC transcodificado',
 };
+
+// Static (not measured) comparison notes — the download-only pipeline only
+// ever fetches one format at a time, so unlike analysisPipeline.js's
+// side-by-side variants there's no second file here to actually compare
+// against. Opus needs no note: it's already the native, non-transcoded pick.
+function buildFormatNote(format) {
+  if (format === 'aac_transcoded') {
+    return 'AAC transcodificado é gerado localmente a partir do áudio nativo (recodificação) — carrega perda de geração adicional. Quando o yt-dlp oferece um stream AAC nativo para essa faixa, "AAC nativo" tende a preservar mais qualidade.';
+  }
+  if (format === 'aac_native') {
+    return 'AAC nativo foi baixado direto nesse codec, sem recodificação adicional — geralmente preferível ao "AAC transcodificado" quando o YouTube oferece esse stream.';
+  }
+  return null;
+}
 
 // Distinct from any variantId analysisPipeline.js ever uses ('native',
 // 'aac_native', 'aac_transcoded') so a download-only run never collides with
@@ -77,17 +92,38 @@ export async function runDownload(url, { onProgress, destination, format = 'opus
 
   try {
     let finalFilePath;
+    let metadata;
     if (format === 'aac_transcoded') {
       emit('transcode_start');
       const outputDir = await ytDlp.createTempJobDirAsync();
       finalFilePath = await ffmpeg.transcodeToAacAsync(download.filePath, outputDir);
       cleanupCandidates.push(finalFilePath);
       emit('transcode_done');
+      metadata = await ffmpeg.getMetadataAsync(finalFilePath);
     } else {
       emit('remux_start');
-      const metadata = await ffmpeg.getMetadataAsync(download.filePath);
+      metadata = await ffmpeg.getMetadataAsync(download.filePath);
       finalFilePath = await ffmpeg.remuxForDownloadAsync(download.filePath, metadata.codecName);
       emit('remux_done');
+    }
+
+    // Best-effort — the download and library save already succeeded by this
+    // point, so a quality-check failure (corrupt edge-case file, etc.) is
+    // logged and degrades to spectrum: null rather than failing the whole
+    // download over a nice-to-have.
+    let spectrum = null;
+    try {
+      emit('quality_check_start');
+      const pcm = await ffmpeg.decodeToMonoPcmAsync(finalFilePath, metadata.sampleRateHz);
+      const analyzed = spectrumAnalyzer.analyze(pcm, metadata.sampleRateHz);
+      spectrum = {
+        cutoffHz: analyzed.cutoffHz,
+        verdict: analyzed.verdict,
+        verdictLevel: analyzed.verdictLevel,
+      };
+      emit('quality_check_done');
+    } catch (err) {
+      console.error('Falha ao verificar qualidade espectral (não crítico)', err);
     }
 
     let savedPath = null;
@@ -126,6 +162,8 @@ export async function runDownload(url, { onProgress, destination, format = 'opus
       cookieInvalid: download.cookieInvalid,
       downloadUrl: `/api/download/${info.id}/${DOWNLOAD_VARIANT_ID}`,
       savedPath,
+      spectrum,
+      formatNote: buildFormatNote(format),
     };
   } catch (err) {
     await Promise.all(cleanupCandidates.map((fp) => ytDlp.cleanupTempFile(fp)));

@@ -67,6 +67,7 @@ const DOWNLOAD_STAGE_LABELS = {
   download_start: 'Baixando áudio',
   remux_start: 'Preparando arquivo',
   transcode_start: 'Transcodificando para AAC',
+  quality_check_start: 'Verificando qualidade espectral',
   save_start: 'Salvando na biblioteca',
 };
 
@@ -671,6 +672,28 @@ function markDownloadRowDone({ row, statusEl }, data) {
   link.download = '';
   link.textContent = 'Baixar novamente';
   statusEl.appendChild(link);
+
+  if (data.spectrum) {
+    const quality = document.createElement('div');
+    quality.className = 'download-log__quality';
+    quality.dataset.level = data.spectrum.verdictLevel || 'unknown';
+    const badge = document.createElement('span');
+    badge.className = 'download-log__quality-badge';
+    badge.textContent = `Corte espectral: ${formatHz(data.spectrum.cutoffHz)} — ${LEVEL_LABELS[data.spectrum.verdictLevel] || LEVEL_LABELS.unknown}`;
+    const detail = document.createElement('span');
+    detail.className = 'download-log__quality-detail';
+    detail.textContent = data.spectrum.verdict;
+    quality.appendChild(badge);
+    quality.appendChild(detail);
+    row.appendChild(quality);
+  }
+
+  if (data.formatNote) {
+    const note = document.createElement('div');
+    note.className = 'download-log__format-note';
+    note.textContent = data.formatNote;
+    row.appendChild(note);
+  }
 }
 
 function markDownloadRowError({ row, statusEl }, message) {
