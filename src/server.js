@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { runAnalysis } from './services/analysisPipeline.js';
+import { runDownload } from './services/downloadPipeline.js';
 import * as ytDlp from './services/ytDlpService.js';
 import * as reportGenerator from './services/reportGenerator.js';
 import * as downloadStore from './services/downloadStore.js';
@@ -15,10 +16,16 @@ const publicDir = path.join(__dirname, '..', 'public');
 const app = express();
 app.use(express.json({ limit: '10mb' })); // session reports carry full spectrum arrays per track
 app.use(express.static(publicDir));
+// Explicit route (not just relying on being a publicDir subfolder) so
+// SPECTROGRAM_DIR can point outside publicDir — needed for the packaged
+// Windows build, where publicDir resolves inside pkg's read-only snapshot.
+app.use('/spectrograms', express.static(config.spectrogramDir));
 
 function validateUrl(url) {
   return typeof url === 'string' && url.trim().length > 0;
 }
+
+const DOWNLOAD_FORMATS = new Set(['opus', 'aac_native', 'aac_transcoded']);
 
 app.post('/api/analyze', async (req, res) => {
   const url = req.body?.url;
@@ -47,8 +54,8 @@ app.get('/api/playlist/entries', async (req, res) => {
   }
 
   try {
-    const entries = await ytDlp.fetchPlaylistEntriesAsync(url);
-    res.status(200).json({ entries });
+    const { entries, playlistTitle } = await ytDlp.fetchPlaylistEntriesAsync(url);
+    res.status(200).json({ entries, playlistTitle });
   } catch (err) {
     console.error('Falha ao listar faixas', err);
     res.status(502).json({ error: 'Falha ao listar faixas da URL informada.', detail: err.message });
@@ -88,6 +95,46 @@ app.get('/api/analyze/stream', async (req, res) => {
   }
 });
 
+// Download-only SSE variant: downloads and remuxes the native best-audio stream
+// without running any analysis (no ffprobe cross-checks, no spectrogram, no
+// FFT) — for users who just want the file to organize locally. Same SSE shape
+// as /api/analyze/stream so the client can reuse its EventSource handling.
+app.get('/api/download-track/stream', async (req, res) => {
+  const url = req.query?.url;
+  if (!validateUrl(url)) {
+    res.status(400).json({ error: 'Informe uma URL do YouTube, YouTube Music ou SoundCloud.' });
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
+  };
+
+  const subfolder = typeof req.query?.subfolder === 'string' ? req.query.subfolder : '';
+  const fileNameBase = typeof req.query?.fileNameBase === 'string' ? req.query.fileNameBase : '';
+  const format = DOWNLOAD_FORMATS.has(req.query?.format) ? req.query.format : 'opus';
+
+  try {
+    const result = await runDownload(url, {
+      onProgress: (stage, data) => send(stage, data),
+      destination: { subfolder, fileNameBase },
+      format,
+    });
+    send('done', result);
+  } catch (err) {
+    console.error('Falha ao baixar faixa (stream)', err);
+    send('error', { title: err.title ?? 'Falha ao baixar o áudio', detail: err.message });
+  } finally {
+    res.end();
+  }
+});
+
 // Batch variant: lists a playlist's entries (or a single video, works either way) and
 // analyzes each sequentially, reusing the same pipeline + cache as /api/analyze. Streamed
 // over SSE since a full playlist can take a while; per-track events are prefixed with
@@ -111,7 +158,7 @@ app.get('/api/analyze-playlist/stream', async (req, res) => {
 
   let entries;
   try {
-    entries = await ytDlp.fetchPlaylistEntriesAsync(url);
+    ({ entries } = await ytDlp.fetchPlaylistEntriesAsync(url));
   } catch (err) {
     console.error('Falha ao listar playlist', err);
     send('error', { title: 'Falha ao listar playlist', detail: err.message });

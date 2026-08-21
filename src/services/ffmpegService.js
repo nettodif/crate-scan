@@ -1,13 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { runAndCaptureBytesAsync, runAsync } from './processRunner.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const publicDir = path.join(__dirname, '..', '..', 'public');
-const spectrogramDir = path.join(publicDir, 'spectrograms');
 
 // yt-dlp's "bestaudio" often lands on an Opus stream muxed into a .webm container
 // (itag 251) — bit-for-bit fine for analysis, but an awkward extension for a user to
@@ -107,13 +102,14 @@ export async function getMetadataAsync(filePath) {
  * legend=0 keeps the image as pure spectrogram data (no native ffmpeg axis) — the
  * frontend draws its own axis/cutoff overlay on top, since it knows the exact
  * cutoffHz our own analysis computed (something ffmpeg's legend can't show).
- * Returns a web-relative URL (served from public/spectrograms).
+ * Returns a web-relative URL served from config.spectrogramDir — server.js mounts
+ * that directory at /spectrograms (see the dedicated static route there).
  */
 export async function generateSpectrogramAsync(filePath, id) {
-  await fs.mkdir(spectrogramDir, { recursive: true });
+  await fs.mkdir(config.spectrogramDir, { recursive: true });
 
   const fileName = `${id}_${randomUUID().replace(/-/g, '')}.png`;
-  const outputPath = path.join(spectrogramDir, fileName);
+  const outputPath = path.join(config.spectrogramDir, fileName);
 
   const args = [
     '-y',

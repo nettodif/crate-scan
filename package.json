@@ -5,11 +5,20 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "package:win": "node packaging/windows/build.mjs"
   },
   "dependencies": {
     "express": "^4.19.2",
     "fft.js": "^4.0.4",
     "pdfkit": "^0.19.1"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^5.15.0",
+    "extract-zip": "^2.0.1"
+  },
+  "pkg": {
+    "assets": ["public/**/*"],
+    "targets": ["node20-win-x64"]
   }
 }

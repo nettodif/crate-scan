@@ -1,12 +1,19 @@
 # CrateScan
 
-Pré-análise de qualidade de áudio para faixas do YouTube, YouTube Music e SoundCloud,
-inspirado no carregamento de faixas no rekordbox: baixa o áudio, extrai metadados técnicos
-(codec, bitrate, sample rate) e gera um espectrograma + um "corte espectral estimado" que
-ajuda a identificar faixas transcodificadas ou de baixo bitrate mesmo quando o bitrate
-declarado parece bom.
+Ferramenta pra YouTube, YouTube Music e SoundCloud com dois modos, numa aba no topo da UI:
 
-## Como funciona
+- **Analisar**: pré-análise de qualidade de áudio inspirada no carregamento de faixas no
+  rekordbox — baixa o áudio, extrai metadados técnicos (codec, bitrate, sample rate) e
+  gera um espectrograma + um "corte espectral estimado" que ajuda a identificar faixas
+  transcodificadas ou de baixo bitrate mesmo quando o bitrate declarado parece bom.
+- **Baixar**: pula a análise e baixa direto (faixa, álbum ou playlist), no formato que
+  você escolher (Opus, AAC nativo ou AAC transcodificado), já organizado numa biblioteca
+  local (subpasta, pasta por playlist/álbum, faixas numeradas).
+
+Também dá pra rodar como app Windows standalone (`.exe`), sem precisar instalar nada — ver
+a seção própria mais abaixo.
+
+## Como funciona (modo Analisar)
 
 1. **Download**: `yt-dlp` baixa o melhor stream de áudio nativo disponível (sem reencodar).
 2. **Metadados**: `ffprobe` lê codec, bitrate declarado, sample rate, canais e duração.
@@ -99,6 +106,37 @@ instalar nada a mais. Se for rodar yt-dlp manualmente fora do app, adicione
 Com cookies válidos, o app já escolhe automaticamente o melhor formato disponível
 (`-f bestaudio/best`) — nenhuma configuração extra é necessária além do acima.
 
+### Cookie válido, mas download falha só em Docker
+
+Padrão específico: o upload do `cookies.txt` passa na validação normalmente, mas uma
+análise/download real falha logo em seguida — só acontece rodando via Docker, não local.
+Hipótese mais provável: a validação do cookie (`--simulate --skip-download`) só lista
+metadados e pode nunca chegar a exercitar o "desafio n" de verdade — isso só acontece
+quando o yt-dlp precisa montar uma URL de mídia real pra baixar, então o componente
+auxiliar (EJS) que resolve esse desafio só é buscado do GitHub nesse momento, não durante
+a validação. Se a rede do container tiver qualquer restrição de saída (firewall, DNS,
+proxy) que não afete a validação (mais leve) mas afete esse fetch, o padrão bate
+exatamente com o relatado.
+
+O `Dockerfile` já tenta pré-buscar esse componente durante o build (quando a rede já está
+garantida, já que o próprio build baixa o binário do yt-dlp) — isso deve resolver a maior
+parte dos casos depois de um `docker compose up --build`. Se persistir mesmo assim, o erro
+que o app mostra agora já inclui uma dica de diagnóstico (`describeYtDlpFailure` em
+`ytDlpService.js` detecta padrões de falha de rede no stderr do yt-dlp). Pra confirmar de
+vez, capture a saída verbose de dentro do próprio container:
+
+```bash
+docker compose exec cratescan curl -v https://github.com
+docker compose exec cratescan yt-dlp -v --cookies /app/data/auth/cookies.txt \
+  --js-runtimes node:$(docker compose exec cratescan which node) \
+  --remote-components ejs:github <URL real que está falhando>
+```
+
+Se o `curl` falhar, é confirmadamente um problema de rede de saída do container/host
+(DNS, firewall, proxy) — fora do controle do app, precisa ser resolvido na configuração de
+rede do ambiente Docker. Se o `curl` funcionar mas o `yt-dlp -v` continuar falhando no
+mesmo ponto, a saída verbose completa é o próximo passo pra identificar exatamente onde.
+
 Se aparecer `HTTP Error 403: Forbidden` ao baixar uma faixa **sem** cookie configurado
 (diferente do erro acima — a listagem de formatos funciona, só a URL do arquivo de áudio
 em si é rejeitada), é o YouTube bloqueando acesso anônimo de forma inconsistente
@@ -139,6 +177,15 @@ O `docker-compose.yml` já vem com dois volumes nomeados que persistem entre res
   "Enviar cookies.txt" funciona exatamente igual ao rodando local — é o jeito recomendado de
   configurar autenticação em Docker (veja a seção acima).
 
+Além desses, a biblioteca organizada (`LIBRARY_ROOT`, ver seção acima sobre o modo
+"Baixar") vem montada como **bind-mount pro host** (não volume nomeado) por padrão, em
+`./data/library`, pra dar pra abrir os arquivos direto no explorador de arquivos/Rekordbox
+sem precisar entrar no container. Pra apontar pra outra pasta do host:
+
+```bash
+LIBRARY_HOST_PATH=/caminho/no/host/minha-musica docker compose up --build
+```
+
 Pra mudar a porta exposta no host, edite o mapeamento `ports` em `docker-compose.yml`
 (ex. `"8080:5178"`).
 
@@ -149,6 +196,19 @@ dá pra montar um cookies.txt do host direto, sem precisar entrar na UI depois d
 YTDLP_COOKIES_HOST_PATH=/caminho/no/host/cookies.txt YTDLP_COOKIES_FILE=/app/cookies.txt \
   docker compose up --build
 ```
+
+## Rodando como app Windows (`.exe` standalone)
+
+Pra quem não quer lidar com Node/ffmpeg/yt-dlp nem Docker: `packaging/windows/` empacota
+tudo isso num único `CrateScan.exe` (via [`pkg`](https://github.com/yao-pkg/pkg)) — a
+mesma UI web de sempre, só que instalada como um app Windows comum, sem precisar instalar
+nada manualmente. Dados (cookies, biblioteca, cache de espectrogramas) ficam em
+`%APPDATA%\CrateScan`/`Documentos\CrateScan`, fora da pasta de instalação.
+
+Gerar o `.exe`/instalador não precisa necessariamente de uma máquina Windows — veja
+[`packaging/windows/README.md`](packaging/windows/README.md) pras três formas de build
+(local direto, via Docker só pro `.exe`, ou via GitHub Actions pro pipeline completo
+incluindo o instalador Inno Setup).
 
 ## Estrutura do projeto
 
@@ -162,13 +222,19 @@ create-scan/
       ffmpegService.js            # metadados + espectrograma + decodificação PCM + remux
       spectrumAnalyzer.js         # FFT e heurística de corte espectral
       analysisPipeline.js         # orquestra download → metadados → espectro → veredito
+      downloadPipeline.js         # modo "Baixar": só download + remux/transcode, sem análise
       analysisCache.js            # cache em memória por videoId (TTL 1h)
       downloadStore.js            # mantém o áudio baixado disponível pra download local
+      libraryStore.js             # copia o download final pra dentro de LIBRARY_ROOT, organizado
       cookieStore.js              # cookies.txt enviado pela UI
       reportGenerator.js          # export de relatório em CSV/PDF
       processRunner.js            # helper para rodar processos externos
   public/
     index.html / styles.css / app.js   # frontend (HTML/CSS/JS puro, sem build step)
+  packaging/
+    windows/                     # empacotamento como .exe standalone (ver seção própria abaixo)
+  .github/workflows/
+    build-windows.yml            # CI que gera o .exe + instalador Windows sob demanda
 ```
 
 ## Funcionalidades
@@ -187,6 +253,20 @@ create-scan/
 - **Download local**: depois de analisada, a faixa fica disponível pra baixar
   (`GET /api/download/:id`), remuxada pra uma extensão compatível com o codec real (sem
   reencode) — ver seção de cookies acima pra qualidade mais alta.
+- **Modo "Baixar" (aba separada da análise)**: cole uma URL de faixa, álbum ou playlist e
+  baixe o áudio direto, sem rodar espectrograma/FFT. Cada faixa baixada é automaticamente
+  copiada pra dentro da biblioteca local organizada (pasta configurada via `LIBRARY_ROOT`,
+  padrão `data/library`) — dá pra definir uma subpasta de destino, ligar uma pasta
+  agregadora com o nome da playlist/álbum e numerar as faixas na ordem original (`01 - `,
+  `02 - `, ...). O link "Baixar novamente" (`GET /api/download-track/stream`) continua
+  disponível como reserva além da cópia salva na biblioteca.
+- **Escolha de formato no modo "Baixar"**: um seletor deixa escolher entre **Opus**
+  (nativo, geralmente melhor qualidade — padrão), **AAC nativo** (quando o YouTube oferece
+  um stream AAC pra aquele vídeo) ou **AAC transcodificado** (baixa o áudio nativo e
+  reencoda localmente via `ffmpeg`, útil quando nem Opus nem AAC nativo servem). Opus/AAC
+  nativo são "melhor esforço" — se o yt-dlp não encontrar esse codec pra uma faixa
+  específica, o download falha com um erro claro em vez de trocar de formato
+  silenciosamente.
 - **Cache de análise**: resultado fica em memória por `videoId` (TTL 1h); "Limpar cache" na
   UI invalida uma faixa específica ou tudo, útil depois de configurar/trocar um cookie.
 - **Exportar relatório**: `POST /api/report?format=csv|pdf`, body `{ sessions: [...] }` com

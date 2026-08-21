@@ -3,3 +3,5 @@ public/spectrograms/*.png
 .env
 data/
 .claude/launch.json
+packaging/windows/bin/
+dist/

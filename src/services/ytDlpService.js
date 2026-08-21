@@ -19,6 +19,16 @@ const tempRoot = path.join(os.tmpdir(), 'cratescan');
 // first use, which --remote-components ejs:github enables.
 const JS_RUNTIME_ARGS = ['--js-runtimes', `node:${process.execPath}`, '--remote-components', 'ejs:github'];
 
+// Codec-targeted yt-dlp format selectors, shared by analysisPipeline.js (which
+// compares variants side by side) and downloadPipeline.js (which lets the user
+// pick one explicitly before downloading). Passed to downloadVariantAsync,
+// which returns null instead of throwing when a video simply doesn't offer
+// that codec, so callers can treat "unavailable" as a normal outcome.
+export const FORMAT_SELECTORS = {
+  opus: 'bestaudio[acodec^=opus]/bestaudio[acodec^=vorbis]',
+  aac_native: 'bestaudio[acodec^=mp4a]/bestaudio[acodec^=aac]',
+};
+
 /**
  * Downloads the best available audio stream (no re-encoding) for the given URL
  * and returns the local file path plus basic metadata.
@@ -91,6 +101,15 @@ export async function validateCookiesAsync(cookiesPath) {
   throw new Error(`yt-dlp não conseguiu usar esse cookies.txt pra nenhum serviço suportado. Detalhe: ${detail}`);
 }
 
+// Symptoms of the container/host being unable to reach the network at all —
+// notably GitHub, needed to fetch the EJS challenge-solver component (see
+// JS_RUNTIME_ARGS above) the first time an authenticated download actually
+// needs to resolve a real media URL (unlike --simulate cookie validation,
+// which may never exercise that code path at all). Distinct from the
+// "Requested format is not available" / 403 cases below, which are about
+// YouTube rejecting the request, not the network being unreachable.
+const NETWORK_FAILURE_RE = /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|Temporary failure in name resolution|Name or service not known|Failed to resolve|Connection refused|Network is unreachable|Unable to download.*component/i;
+
 /**
  * "Requested format is not available" with no -f override (as in
  * fetchPlaylistEntriesAsync) means yt-dlp couldn't resolve ANY format for the
@@ -99,6 +118,14 @@ export async function validateCookiesAsync(cookiesPath) {
  * that instead of leaving the user to guess from the raw yt-dlp error.
  */
 function describeYtDlpFailure(stdErr) {
+  if (authArgs().length && NETWORK_FAILURE_RE.test(stdErr)) {
+    return `${stdErr}\n\nIsso parece uma falha de rede do próprio container/servidor (não do YouTube) — ` +
+      'com um cookie ativo, o yt-dlp pode precisar baixar um componente auxiliar do GitHub na primeira vez ' +
+      'que resolve uma URL de mídia de verdade, e essa é a exceção mais provável se o upload do cookie ' +
+      'funcionou mas o download real falha. Rodando via Docker, teste o acesso de dentro do container: ' +
+      '"docker compose exec cratescan curl -v https://github.com".';
+  }
+
   if (cookieStore.getPath() && stdErr.includes('Requested format is not available')) {
     return `${stdErr}\n\nIsso pode indicar que o cookie enviado expirou ou está inválido — tente exportar um cookies.txt novo.`;
   }
@@ -215,8 +242,11 @@ function parseSourceFormatLine(line) {
 
 /**
  * Lists the entries of a playlist URL without downloading anything (flat-playlist).
- * Returns one { id, url, title } per entry, in playlist order. Works for a plain
- * (non-playlist) video URL too — resolves to a single-item array in that case.
+ * Returns { entries, playlistTitle }: one { id, url, title } per entry, in playlist
+ * order, plus the playlist's own title (yt-dlp injects playlist_title/playlist onto
+ * every flat-playlist entry when the URL actually is a playlist). Works for a plain
+ * (non-playlist) video URL too — resolves to a single-item entries array with
+ * playlistTitle: null in that case.
  */
 export async function fetchPlaylistEntriesAsync(url) {
   const args = ['--flat-playlist', ...JS_RUNTIME_ARGS, ...authArgs(), '--dump-json', url];
@@ -226,7 +256,7 @@ export async function fetchPlaylistEntriesAsync(url) {
     throw new Error(`Falha ao listar playlist com yt-dlp (código ${result.exitCode}). Detalhe: ${describeYtDlpFailure(result.stdErr)}`);
   }
 
-  const entries = result.stdOut
+  const rawEntries = result.stdOut
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
@@ -237,19 +267,22 @@ export async function fetchPlaylistEntriesAsync(url) {
         return null;
       }
     })
-    .filter((entry) => entry !== null)
-    .map((entry) => {
-      const id = entry.id ?? 'unknown';
-      const rawUrl = entry.webpage_url ?? entry.url ?? '';
-      const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : url;
-      return { id, url: resolvedUrl, title: entry.title ?? 'Título desconhecido' };
-    });
+    .filter((entry) => entry !== null);
 
-  if (entries.length === 0) {
+  if (rawEntries.length === 0) {
     throw new Error('yt-dlp não retornou nenhuma faixa para essa URL.');
   }
 
-  return entries;
+  const entries = rawEntries.map((entry) => {
+    const id = entry.id ?? 'unknown';
+    const rawUrl = entry.webpage_url ?? entry.url ?? '';
+    const resolvedUrl = rawUrl.startsWith('http') ? rawUrl : url;
+    return { id, url: resolvedUrl, title: entry.title ?? 'Título desconhecido' };
+  });
+
+  const playlistTitle = rawEntries[0]?.playlist_title ?? rawEntries[0]?.playlist ?? null;
+
+  return { entries, playlistTitle };
 }
 
 export async function fetchInfoAsync(url) {

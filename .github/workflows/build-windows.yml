@@ -1,0 +1,39 @@
+name: Build Windows package
+
+# Manual trigger only — this doesn't run on every push, only when someone
+# explicitly wants a Windows build (Actions tab → Run workflow).
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-exe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run package:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cratescan-exe
+          path: |
+            dist/CrateScan.exe
+            dist/bin/**
+
+  build-installer:
+    needs: build-exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cratescan-exe
+          path: dist
+      - run: choco install innosetup -y
+      - run: iscc packaging\windows\installer.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cratescan-installer
+          path: dist/CrateScanSetup.exe

@@ -10,6 +10,7 @@ services:
       - spectrograms:/app/public/spectrograms
       - ${YTDLP_COOKIES_HOST_PATH:-/dev/null}:/app/cookies.txt:ro
       - cookies_data:/app/data/auth
+      - ${LIBRARY_HOST_PATH:-./data/library}:/app/data/library
 
 volumes:
   spectrograms:
